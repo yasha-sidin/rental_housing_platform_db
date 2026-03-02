@@ -24,6 +24,7 @@ rental_housing_platform_db/
 +- .env
 +- README.md
 +- docs/
+¦  +- 00_technical_specification.md
 ¦  +- 01_context.md
 ¦  +- 02_domain_model.md
 ¦  +- 03_invariants.md
@@ -47,7 +48,8 @@ L- artifacts/
 - `docker-compose.yaml` - локальный запуск PostgreSQL в Docker.
 - `.env` - параметры окружения для контейнера БД.
 - `docs/` - текстовая документация проекта.
-- `docs/01_context.md` - контекст, цель, границы и допущения.
+- `docs/00_technical_specification.md` - полная версия технического задания (единый источник требований).
+- `docs/01_context.md` - краткий рабочий контекст проекта и навигация по артефактам.
 - `docs/02_domain_model.md` - сущности, атрибуты и связи доменной модели.
 - `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
 - `docs/04_queries_catalog.md` - каталог бизнес-задач и соответствующих SQL-запросов.
@@ -66,5 +68,6 @@ L- artifacts/
 - Все изменения схемы вносятся только через `db/migrations/`.
 - Тестовые данные добавляются через `db/seeds/`.
 - Проверки бизнес-правил фиксируются в `db/tests/`.
+- Основные требования ведутся в `docs/00_technical_specification.md`.
 - Запросы из ТЗ оформляются в `sql/operational/` и `sql/analytics/`.
 - Документация синхронизируется с фактической схемой БД.
