@@ -6,7 +6,7 @@ CREATE TABLE listings
     id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     owner_id         BIGINT                     NOT NULL REFERENCES users (id),
     object_type_id   BIGINT                     NOT NULL REFERENCES object_types (id),
-    address_id       BIGINT UNIQUE              NOT NULL REFERENCES addresses (id),
+    address_id       BIGINT                     NOT NULL REFERENCES addresses (id),
     capacity         INT                        NOT NULL,
     number_of_rooms  INT                        NOT NULL,
     description      VARCHAR(1024),
