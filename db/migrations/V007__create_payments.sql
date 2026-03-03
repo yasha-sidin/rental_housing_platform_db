@@ -68,7 +68,9 @@ BEGIN
     END IF;
 
     -- Этап 3: запрещаем старт платежной сессии после истечения окна оплаты брони.
-    IF NEW.initiated_date > v_booking_expires_at THEN
+    -- Сравниваем с текущим временем БД, а не с входным initiated_date, чтобы нельзя было
+    -- обойти правило, передав "старое" значение initiated_date вручную.
+    IF now() > v_booking_expires_at THEN
         RAISE EXCEPTION
             'payment session cannot start after booking expiration, booking_id=%',
             NEW.booking_id;
@@ -80,7 +82,7 @@ END;
 $$;
 
 CREATE TRIGGER trg_payments_require_not_expired_booking
-    BEFORE INSERT OR UPDATE
+    BEFORE INSERT
     ON payments
     FOR EACH ROW
 EXECUTE FUNCTION trg_payments_require_not_expired_booking();
