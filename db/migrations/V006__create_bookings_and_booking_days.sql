@@ -1,5 +1,8 @@
 -- V006: бронирования и связь бронирования с выбранными днями доступности.
 -- Зависимости: users (V003), listings (V004), currencies (V002), listing_availability_days (V005).
+-- Важно: миграция фиксирует структурные инварианты БД (FK/UNIQUE/CHECK).
+-- Конкурентная защита от овербукинга (атомарный hold дня, retries, идемпотентность)
+-- является задачей backend-транзакций и должна быть реализована в прикладном сервисе.
 
 -- Статус жизненного цикла бронирования.
 CREATE TYPE booking_status AS ENUM ('created', 'payment_pending', 'confirmed', 'expired', 'cancelled', 'completed');
@@ -21,9 +24,14 @@ CREATE TABLE bookings
     last_update_date         TIMESTAMPTZ    NOT NULL DEFAULT now(),
     -- Время истечения окна оплаты до создания платежной сессии.
     booking_expires_at       TIMESTAMPTZ    NOT NULL,
-    -- Проверка гарантирует, что срок истечения бронирования позже времени создания.
+    -- Проверка гарантирует, что срок истечения бронирования:
+    -- 1) строго позже времени создания;
+    -- 2) не превышает окно удержания в 5 минут по требованиям ТЗ.
     CONSTRAINT chk_bookings_expires_after_create
-        CHECK (booking_expires_at > creation_date),
+        CHECK (
+            booking_expires_at > creation_date AND
+            booking_expires_at <= creation_date + INTERVAL '5 minutes'
+            ),
     -- Проверка исключает нулевое/отрицательное количество гостей.
     CONSTRAINT chk_bookings_guests_count_positive
         CHECK (guests_count > 0),
@@ -41,6 +49,9 @@ CREATE TABLE bookings
 -- Связующая таблица "бронь -> выбранные дни".
 -- Отдельная таблица нужна для надежной истории: даже после отмены/истечения
 -- сохраняется факт, какие дни были привязаны к брони.
+-- Допускается, что один и тот же день может исторически встречаться в разных бронированиях
+-- (например, после EXPIRED/CANCELLED). Актуальная доступность дня контролируется статусами
+-- в listing_availability_days и транзакционной логикой приложения.
 CREATE TABLE booking_days
 (
     id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
