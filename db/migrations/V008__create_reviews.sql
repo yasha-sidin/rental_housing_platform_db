@@ -22,8 +22,8 @@ CREATE TABLE reviews
         CHECK (body IS NULL OR btrim(body) <> ''),
 
     -- Проверка консистентности модерации:
-    -- 1) не модерирован -> дата модерации отсутствует;
-    -- 2) модерирован -> дата модерации задана и не раньше даты создания.
+    -- 1) не прошел модерацию -> дата модерации отсутствует;
+    -- 2) прошел модерацию -> дата модерации задана и не раньше даты создания.
     CONSTRAINT chk_reviews_moderation_consistency
         CHECK (
             (moderated = false AND moderation_date IS NULL) OR
