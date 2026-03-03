@@ -31,7 +31,48 @@ CREATE TABLE reviews
             )
 );
 
--- Важно для бизнес-правила ТЗ:
--- Отзыв должен создаваться только по завершенному бронированию (booking.status = 'completed').
--- В текущей модели это правило контролируется на стороне приложения/сервиса.
--- При необходимости правило можно усилить триггером в БД в отдельной миграции.
+-- Триггерная проверка бизнес-инварианта:
+-- отзыв допускается только по завершенному бронированию.
+-- FOR UPDATE блокирует строку бронирования на время транзакции и исключает гонки,
+-- когда статус брони меняется параллельно с созданием/изменением отзыва.
+CREATE OR REPLACE FUNCTION trg_reviews_require_completed_booking()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS
+$$
+DECLARE
+    v_booking_status booking_status;
+BEGIN
+    -- Этап 1: читаем статус бронирования, к которому привязывается отзыв.
+    -- FOR UPDATE берёт блокировку строки бронирования до конца транзакции,
+    -- чтобы параллельная смена статуса не нарушила проверку инварианта.
+    SELECT b.status
+    INTO v_booking_status
+    FROM bookings b
+    WHERE b.id = NEW.booking_id
+    FOR UPDATE;
+
+    -- Этап 1.1: дополнительная защита от неконсистентной ссылки.
+    -- (обычно не сработает из-за FK, но даёт явную причину ошибки на уровне триггера).
+    IF v_booking_status IS NULL THEN
+        RAISE EXCEPTION 'booking_id=% does not exist', NEW.booking_id;
+    END IF;
+
+    -- Этап 2: ключевая бизнес-проверка.
+    -- Разрешаем вставку/обновление отзыва только для завершённой брони.
+    IF v_booking_status <> 'completed' THEN
+        RAISE EXCEPTION
+            'review is allowed only for completed booking, booking_id=% has status=%',
+            NEW.booking_id, v_booking_status;
+    END IF;
+
+    -- Этап 3: все проверки пройдены, операция разрешена.
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_reviews_require_completed_booking
+    BEFORE INSERT OR UPDATE
+    ON reviews
+    FOR EACH ROW
+EXECUTE FUNCTION trg_reviews_require_completed_booking();
