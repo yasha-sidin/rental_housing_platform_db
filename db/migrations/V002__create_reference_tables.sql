@@ -26,7 +26,11 @@ INSERT INTO permissions (name)
 VALUES ('listing.read'),
        ('listing.create'),
        ('listing.update'),
-       ('listing.delete'),
+
+       ('photo.read'),
+       ('photo.create'),
+       ('photo.update'),
+       ('photo.delete'),
 
        ('booking.create'),
        ('booking.read'),
@@ -35,12 +39,14 @@ VALUES ('listing.read'),
 
        ('payment.create'),
        ('payment.read'),
+       ('payment.refund'),
 
        ('review.create'),
        ('review.read'),
        ('review.moderate'),
        ('review.delete'),
 
+       ('availability.create'),
        ('availability.update'),
 
        ('price_rule.create'),

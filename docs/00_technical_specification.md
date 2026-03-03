@@ -112,6 +112,7 @@
 
 - USER
 - LISTING
+- PHOTO
 - AVAILABILITY
 - PRICE_RULE
 - BOOKING
@@ -126,6 +127,7 @@
 - UPDATE
 - DELETE
 - CANCEL
+- REFUND
 - MODERATE
 
 ### 4.2.4 Матрица разрешений
@@ -133,6 +135,7 @@
 #### GUEST
 
 - LISTING:READ
+- PHOTO:READ
 - BOOKING:CREATE
 - BOOKING:READ (только свои)
 - BOOKING:CANCEL (только свои, в допустимых статусах)
@@ -145,20 +148,22 @@
 
 - LISTING:CREATE
 - LISTING:READ (свои)
-- LISTING:UPDATE (свои)
-- LISTING:DELETE (деактивация своих)
-- AVAILABILITY:UPDATE (для своих объектов)
+- LISTING:UPDATE (свои, включая смену статуса публикации)
+- PHOTO:CREATE/READ/UPDATE/DELETE (для своих объектов)
+- AVAILABILITY:CREATE/UPDATE (для своих объектов)
 - PRICE_RULE:CREATE/UPDATE/DELETE (для своих объектов)
 - BOOKING:READ (по своим объектам)
 - BOOKING:UPDATE (подтверждение/отклонение)
+- BOOKING:CANCEL (для своих объектов, с обязательным указанием причины при отмене подтвержденной брони)
 - REPORT:READ (по своим объектам)
 
 #### ADMIN
 
 - USER:READ/UPDATE
-- LISTING:READ/UPDATE/DELETE (любые)
+- LISTING:READ/UPDATE (любые, только модерация и смена статусов)
+- PHOTO:READ/DELETE (любые, только модерация)
 - BOOKING:READ/UPDATE/CANCEL (любые)
-- PAYMENT:READ (любые)
+- PAYMENT:READ/REFUND (любые)
 - REVIEW:READ/MODERATE/DELETE
 - REPORT:READ (глобальная аналитика)
 
@@ -307,6 +312,7 @@
 13. Невозможность физического удаления созданных дат доступности (разрешена только смена статуса).
 14. Невозможность смены статуса даты доступности, если дата удерживается активной бронью.
 15. Невозможность отмены подтвержденного бронирования владельцем без причины.
+16. Невозможность физического удаления объявлений (допускается только смена статуса публикации).
 
 ---
 
