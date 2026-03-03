@@ -162,3 +162,24 @@ CREATE TRIGGER trg_listing_availability_days_write_history
     ON listing_availability_days
     FOR EACH ROW
 EXECUTE FUNCTION trg_listing_availability_days_write_history();
+
+-- Триггерная защита от физического удаления дат доступности.
+-- Бизнес-правило ТЗ: даты не удаляются, а переводятся между статусами.
+CREATE OR REPLACE FUNCTION trg_listing_availability_days_prevent_delete()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS
+$$
+BEGIN
+    -- Этап 1: блокируем физическое удаление записи календаря.
+    RAISE EXCEPTION
+        'physical delete is forbidden for listing_availability_days (day_id=%). Use status update instead.',
+        OLD.id;
+END;
+$$;
+
+CREATE TRIGGER trg_listing_availability_days_prevent_delete
+    BEFORE DELETE
+    ON listing_availability_days
+    FOR EACH ROW
+EXECUTE FUNCTION trg_listing_availability_days_prevent_delete();

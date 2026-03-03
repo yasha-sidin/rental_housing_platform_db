@@ -46,3 +46,24 @@ CREATE TABLE listing_photos
     -- В одном объявлении один слот может быть занят только одним фото.
     CONSTRAINT uq_listing_photos_listing_slot UNIQUE (listing_id, slot)
 );
+
+-- Триггерная защита от физического удаления объявлений.
+-- Бизнес-правило ТЗ: объявления не удаляются, а переводятся в нужный статус публикации.
+CREATE OR REPLACE FUNCTION trg_listings_prevent_delete()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS
+$$
+BEGIN
+    -- Этап 1: блокируем физическое удаление любой строки объявления.
+    RAISE EXCEPTION
+        'physical delete is forbidden for listings (listing_id=%). Use status update instead.',
+        OLD.id;
+END;
+$$;
+
+CREATE TRIGGER trg_listings_prevent_delete
+    BEFORE DELETE
+    ON listings
+    FOR EACH ROW
+EXECUTE FUNCTION trg_listings_prevent_delete();
