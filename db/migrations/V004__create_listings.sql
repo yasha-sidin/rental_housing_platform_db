@@ -20,3 +20,29 @@ CREATE TABLE listings
     -- Проверка не позволяет поставить время обновления раньше времени создания.
     CONSTRAINT chk_listings_update_not_before_create CHECK (last_update_date >= creation_date)
 );
+
+-- Справочник фотографий.
+CREATE TABLE photos
+(
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    extension     photo_extension     NOT NULL,
+    link          VARCHAR(256) UNIQUE NOT NULL,
+    creation_date TIMESTAMPTZ         NOT NULL DEFAULT now(),
+    -- Проверка запрещает пустую ссылку.
+    CONSTRAINT chk_photos_link_not_blank CHECK (btrim(link) <> '')
+);
+
+-- Привязка фото к объявлениям.
+CREATE TABLE listing_photos
+(
+    listing_id BIGINT   NOT NULL REFERENCES listings (id) ON DELETE CASCADE,
+    photo_id   BIGINT   NOT NULL REFERENCES photos (id) ON DELETE CASCADE,
+    slot       SMALLINT NOT NULL,
+    PRIMARY KEY (listing_id, photo_id),
+    -- Фото не может быть привязано к двум объявлениям одновременно.
+    CONSTRAINT uq_listing_photos_photo UNIQUE (photo_id),
+    -- Слот строго от 1 до 20.
+    CONSTRAINT chk_listing_photos_slot_range CHECK (slot BETWEEN 1 AND 20),
+    -- В одном объявлении один слот может быть занят только одним фото.
+    CONSTRAINT uq_listing_photos_listing_slot UNIQUE (listing_id, slot)
+);

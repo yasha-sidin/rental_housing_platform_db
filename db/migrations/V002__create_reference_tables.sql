@@ -106,6 +106,9 @@ CREATE TABLE addresses
 -- Статус публикации объявления/объекта.
 CREATE TYPE listing_publication_status AS ENUM ('active', 'hidden', 'blocked');
 
+-- Допустимые расширения файлов изображений.
+CREATE TYPE photo_extension AS ENUM ('png', 'jpeg');
+
 -- Справочник валют.
 CREATE TABLE currencies
 (
