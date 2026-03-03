@@ -46,7 +46,6 @@ FROM (VALUES
           ('owner', 'listing.update'),
           ('owner', 'photo.create'),
           ('owner', 'photo.read'),
-          ('owner', 'photo.update'),
           ('owner', 'photo.delete'),
           ('owner', 'availability.create'),
           ('owner', 'availability.update'),

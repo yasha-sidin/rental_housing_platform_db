@@ -149,7 +149,7 @@
 - LISTING:CREATE
 - LISTING:READ (свои)
 - LISTING:UPDATE (свои, включая смену статуса публикации)
-- PHOTO:CREATE/READ/UPDATE/DELETE (для своих объектов)
+- PHOTO:CREATE/READ/DELETE (для своих объектов)
 - AVAILABILITY:CREATE/UPDATE (для своих объектов)
 - PRICE_RULE:CREATE/UPDATE/DELETE (для своих объектов)
 - BOOKING:READ (по своим объектам)

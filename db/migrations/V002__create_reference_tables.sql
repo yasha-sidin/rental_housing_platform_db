@@ -29,7 +29,6 @@ VALUES ('listing.read'),
 
        ('photo.read'),
        ('photo.create'),
-       ('photo.update'),
        ('photo.delete'),
 
        ('booking.create'),

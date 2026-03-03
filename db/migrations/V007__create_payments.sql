@@ -10,7 +10,7 @@ CREATE TYPE payment_status AS ENUM (
     'expired',
     'partially_refunded',
     'refunded'
-);
+    );
 
 CREATE TABLE payments
 (
