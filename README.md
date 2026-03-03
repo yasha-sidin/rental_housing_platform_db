@@ -28,7 +28,7 @@ rental_housing_platform_db/
 ¦  +- 01_context.md
 ¦  +- 02_domain_model.md
 ¦  +- 03_invariants.md
-¦  +- 04_queries_catalog.md
+¦  +- 04_business_tasks_catalog.md
 ¦  L- erd/
 +- db/
 ¦  +- migrations/
@@ -52,7 +52,7 @@ L- artifacts/
 - `docs/01_context.md` - краткий рабочий контекст проекта и навигация по артефактам.
 - `docs/02_domain_model.md` - сущности, атрибуты и связи доменной модели.
 - `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
-- `docs/04_queries_catalog.md` - каталог бизнес-задач и соответствующих SQL-запросов.
+- `docs/04_business_tasks_catalog.md` - каталог бизнес-задач.
 - `docs/erd/` - ER-диаграмма (исходники и экспорт).
 - `db/migrations/` - DDL-миграции: создание и изменение схемы БД.
 - `db/seeds/` - заполнение справочников и тестовых данных.
