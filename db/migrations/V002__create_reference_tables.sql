@@ -100,3 +100,41 @@ CREATE TABLE addresses
 
 -- Статус публикации объявления/объекта.
 CREATE TYPE listing_publication_status AS ENUM ('active', 'hidden', 'blocked');
+
+-- Справочник валют.
+CREATE TABLE currencies
+(
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    -- Используем VARCHAR(3), а не CHAR(3), чтобы избежать сравнения со служебными пробелами.
+    code             VARCHAR(3) UNIQUE   NOT NULL,
+    -- Числовой ISO-код валюты (например, 840 для USD). Храним строкой, чтобы сохранять ведущие нули.
+    numeric_code     VARCHAR(3) UNIQUE,
+    name             VARCHAR(128) UNIQUE NOT NULL,
+    symbol           VARCHAR(8),
+    -- Minor unit определяет количество знаков после запятой в стандартном представлении валюты.
+    minor_unit       SMALLINT            NOT NULL DEFAULT 2,
+    is_active        BOOLEAN             NOT NULL DEFAULT true,
+    creation_date    TIMESTAMPTZ         NOT NULL DEFAULT now(),
+    last_update_date TIMESTAMPTZ         NOT NULL DEFAULT now(),
+    -- Проверка обеспечивает формат кода ISO 4217: три буквы в верхнем регистре.
+    CONSTRAINT chk_currencies_code_iso4217
+        CHECK (code ~ '^[A-Z]{3}$'),
+    -- Проверка обеспечивает формат числового ISO-кода: три цифры.
+    CONSTRAINT chk_currencies_numeric_code
+        CHECK (numeric_code IS NULL OR numeric_code ~ '^[0-9]{3}$'),
+    -- Проверка запрещает пустое имя валюты.
+    CONSTRAINT chk_currencies_name_not_blank
+        CHECK (btrim(name) <> ''),
+    -- Проверка ограничивает диапазон minor unit реалистичными значениями.
+    CONSTRAINT chk_currencies_minor_unit_range
+        CHECK (minor_unit BETWEEN 0 AND 6),
+    -- Проверка защищает временную целостность записи.
+    CONSTRAINT chk_currencies_update_not_before_create
+        CHECK (last_update_date >= creation_date)
+);
+
+-- Статус доступности конкретного дня.
+CREATE TYPE availability_status AS ENUM ('available', 'held', 'booked', 'blocked');
+
+-- Источник изменения цены.
+CREATE TYPE price_change_source AS ENUM ('base_price', 'day_override');
