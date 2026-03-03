@@ -44,3 +44,43 @@ CREATE TABLE payments
     CONSTRAINT chk_payments_session_expires_after_initiated
         CHECK (provider_payment_session_expires_at > initiated_date)
 );
+
+-- Триггерная проверка: платежную сессию можно создать только до booking_expires_at.
+CREATE OR REPLACE FUNCTION trg_payments_require_not_expired_booking()
+    RETURNS TRIGGER
+    LANGUAGE plpgsql
+AS
+$$
+DECLARE
+    v_booking_expires_at TIMESTAMPTZ;
+BEGIN
+    -- Этап 1: читаем и блокируем строку бронирования на время транзакции.
+    -- Это защищает от гонки между созданием платежа и одновременным изменением параметров брони.
+    SELECT b.booking_expires_at
+    INTO v_booking_expires_at
+    FROM bookings b
+    WHERE b.id = NEW.booking_id
+        FOR UPDATE;
+
+    -- Этап 2: дополнительная защита от неконсистентной ссылки.
+    IF v_booking_expires_at IS NULL THEN
+        RAISE EXCEPTION 'booking_id=% does not exist', NEW.booking_id;
+    END IF;
+
+    -- Этап 3: запрещаем старт платежной сессии после истечения окна оплаты брони.
+    IF NEW.initiated_date > v_booking_expires_at THEN
+        RAISE EXCEPTION
+            'payment session cannot start after booking expiration, booking_id=%',
+            NEW.booking_id;
+    END IF;
+
+    -- Этап 4: все проверки пройдены.
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_payments_require_not_expired_booking
+    BEFORE INSERT OR UPDATE
+    ON payments
+    FOR EACH ROW
+EXECUTE FUNCTION trg_payments_require_not_expired_booking();
