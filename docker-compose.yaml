@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   rental_housing_platform_db:
     image: postgres:18-alpine
@@ -11,6 +9,22 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5488:5432"
+
+  migration_runner:
+    build:
+      context: .
+      dockerfile: docker/migrations/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DB_HOST: rental_housing_platform_db
+      DB_PORT: 5432
+      DB_SSLMODE: disable
+    depends_on:
+      - rental_housing_platform_db
+    volumes:
+      - ./db/migrations:/workspace/db/migrations:ro
+      - ./db/rollback:/workspace/db/rollback:ro
 
 volumes:
   postgres_data:

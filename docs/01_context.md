@@ -27,6 +27,16 @@
 - UI;
 - интеграции с внешними сервисами.
 
+## Инфраструктура миграций
+
+- Миграции запускаются только через Docker и `Makefile`.
+- Применение/откат выполняет отдельный одноразовый контейнер `migration_runner` с `golang-migrate`.
+- Состояние миграций хранится в таблице `schema_migrations` (стандарт `golang-migrate`).
+- В репозитории сохраняется исходный формат файлов:
+  - up: `db/migrations/V...sql`;
+  - down: `db/rollback/U...sql`.
+- Внутри `migration_runner` перед запуском происходит конвертация во временный формат `*.up.sql` / `*.down.sql`.
+
 ## Доменные области
 
 1. Пользователи.
@@ -69,7 +79,9 @@
 - Бизнес-инварианты: `docs/03_invariants.md`.
 - Каталог бизнес-задач: `docs/04_business_tasks_catalog.md`.
 - ER-диаграмма: `docs/erd/`.
-- Миграции: `db/migrations/`.
+- Docker-runner миграций: `docker/migrations/`.
+- Миграции (up): `db/migrations/`.
+- Миграции (down): `db/rollback/`.
 - Сиды: `db/seeds/`.
 - SQL-тесты инвариантов: `db/tests/`.
 - Операционные запросы: `sql/operational/`.

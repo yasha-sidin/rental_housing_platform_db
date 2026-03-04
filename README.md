@@ -21,8 +21,14 @@
 ```text
 rental_housing_platform_db/
 +- docker-compose.yaml
++- Makefile
 +- .env
 +- README.md
++- docker/
+¦  L- migrations/
+¦     +- Dockerfile
+¦     +- prepare_migrations.sh
+¦     L- run_migrate.sh
 +- docs/
 ¦  +- 00_technical_specification.md
 ¦  +- 01_context.md
@@ -32,9 +38,9 @@ rental_housing_platform_db/
 ¦  L- erd/
 +- db/
 ¦  +- migrations/
+¦  +- rollback/
 ¦  +- seeds/
-¦  +- tests/
-¦  L- rollback/
+¦  L- tests/
 +- sql/
 ¦  +- operational/
 ¦  L- analytics/
@@ -43,10 +49,44 @@ L- artifacts/
    L- snapshots/
 ```
 
+## Система миграций (Docker-only)
+
+Миграции выполняются только через отдельный контейнер `migration_runner` и `golang-migrate`.
+
+Важно:
+
+- исходные файлы в репозитории не переименовываются:
+  - up-миграции: `db/migrations/V...sql`;
+  - down-миграции: `db/rollback/U...sql`;
+- перед запуском утилиты внутри контейнера они конвертируются во временный формат `*.up.sql` / `*.down.sql`;
+- состояние версий хранится в стандартной таблице `schema_migrations`, которую ведет `golang-migrate`.
+
+## Команды Makefile
+
+### Базовые
+
+- `make up` - поднять PostgreSQL контейнер.
+- `make down` - остановить контейнеры.
+- `make restart` - перезапуск PostgreSQL.
+- `make logs` - логи PostgreSQL.
+- `make ps` - список сервисов.
+
+### Миграции
+
+- `make migrate-check` - проверить парность `V/U` без применения миграций.
+- `make migrate-up` - применить все pending миграции.
+- `make migrate-down-one` - откатить одну миграцию.
+- `make migrate-down STEPS=N` - откатить `N` миграций.
+- `make migrate-version` - показать текущую версию миграций.
+- `make migrate-goto VERSION=N` - перейти к целевой версии.
+- `make migrate-force VERSION=N` - принудительно установить версию (аварийная операция).
+
 ## Где что хранится
 
-- `docker-compose.yaml` - локальный запуск PostgreSQL в Docker.
-- `.env` - параметры окружения для контейнера БД.
+- `docker-compose.yaml` - локальный запуск PostgreSQL и migration-runner.
+- `Makefile` - единая точка входа для запуска БД и миграций.
+- `docker/migrations/` - Dockerfile и скрипты контейнера миграций.
+- `.env` - параметры окружения для контейнеров.
 - `docs/` - текстовая документация проекта.
 - `docs/00_technical_specification.md` - полная версия технического задания (единый источник требований).
 - `docs/01_context.md` - краткий рабочий контекст проекта и навигация по артефактам.
@@ -54,20 +94,20 @@ L- artifacts/
 - `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
 - `docs/04_business_tasks_catalog.md` - каталог бизнес-задач.
 - `docs/erd/` - ER-диаграмма (исходники и экспорт).
-- `db/migrations/` - DDL-миграции: создание и изменение схемы БД.
+- `db/migrations/` - DDL up-миграции в исходном формате проекта.
+- `db/rollback/` - DDL down-миграции в исходном формате проекта.
 - `db/seeds/` - заполнение справочников и тестовых данных.
 - `db/tests/` - SQL-проверки ограничений и инвариантов.
-- `db/rollback/` - скрипты отката (если используются в процессе разработки).
-- `sql/operational/` - операционные SQL-запросы (поиск, проверки доступности, выборки по бронированиям).
-- `sql/analytics/` - аналитические SQL-запросы (доходность, загрузка, рейтинги, агрегаты).
+- `sql/operational/` - операционные SQL-запросы.
+- `sql/analytics/` - аналитические SQL-запросы.
 - `artifacts/explain/` - планы выполнения (`EXPLAIN`) ключевых запросов.
-- `artifacts/snapshots/` - скриншоты результатов для отчета/защиты.
+- `artifacts/snapshots/` - снимки результатов для отчета/защиты.
 
 ## Принцип работы с репозиторием
 
-- Все изменения схемы вносятся только через `db/migrations/`.
+- Все изменения схемы вносятся только через `db/migrations/` и `db/rollback/`.
+- Миграции запускаются только через `Makefile`.
 - Тестовые данные добавляются через `db/seeds/`.
 - Проверки бизнес-правил фиксируются в `db/tests/`.
 - Основные требования ведутся в `docs/00_technical_specification.md`.
-- Запросы из ТЗ оформляются в `sql/operational/` и `sql/analytics/`.
 - Документация синхронизируется с фактической схемой БД.
