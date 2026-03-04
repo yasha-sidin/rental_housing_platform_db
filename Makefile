@@ -52,10 +52,9 @@ migrate-down-one:
 # Откатить указанное количество миграций вниз.
 # Пример: make migrate-down STEPS=3
 migrate-down:
-	@if [ -z "$(STEPS)" ]; then \
-		echo "ERROR: set STEPS, example: make migrate-down STEPS=3"; \
-		exit 1; \
-	fi
+ifndef STEPS
+	$(error STEPS is required, example: make migrate-down STEPS=3)
+endif
 	$(MIGRATE_RUNNER) /app/run_migrate.sh down $(STEPS)
 
 # Показать текущую версию миграций (и dirty-статус, если есть).
@@ -66,17 +65,15 @@ migrate-version:
 # Использовать только при восстановлении после ошибки/dirty.
 # Пример: make migrate-force VERSION=8
 migrate-force:
-	@if [ -z "$(VERSION)" ]; then \
-		echo "ERROR: set VERSION, example: make migrate-force VERSION=8"; \
-		exit 1; \
-	fi
+ifndef VERSION
+	$(error VERSION is required, example: make migrate-force VERSION=8)
+endif
 	$(MIGRATE_RUNNER) /app/run_migrate.sh force $(VERSION)
 
 # Перейти к целевой версии (вверх/вниз, в зависимости от текущей).
 # Пример: make migrate-goto VERSION=8
 migrate-goto:
-	@if [ -z "$(VERSION)" ]; then \
-		echo "ERROR: set VERSION, example: make migrate-goto VERSION=8"; \
-		exit 1; \
-	fi
+ifndef VERSION
+	$(error VERSION is required, example: make migrate-goto VERSION=8)
+endif
 	$(MIGRATE_RUNNER) /app/run_migrate.sh goto $(VERSION)
