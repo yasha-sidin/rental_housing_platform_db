@@ -101,6 +101,18 @@ WHERE NOT EXISTS (SELECT 1
                   FROM listings l
                   WHERE l.description = 'Load listing #' || g.idx);
 
+-- Техническая таблица со списком load-объявлений.
+-- Нужна, чтобы дальше работать по listing_id и не повторять фильтрацию через LIKE.
+CREATE TEMP TABLE load_listing_ids
+(
+    listing_id BIGINT PRIMARY KEY
+);
+
+INSERT INTO load_listing_ids (listing_id)
+SELECT l.id
+FROM listings l
+WHERE l.description LIKE 'Load listing #%';
+
 -- 5) Массовые фото и привязка к объявлениям (по одному фото на listing).
 INSERT INTO photos (extension, link)
 SELECT CASE WHEN (gs % 2) = 0 THEN 'jpeg'::photo_extension ELSE 'png'::photo_extension END,
@@ -146,11 +158,10 @@ INSERT
 INTO listing_availability_days (available_date, status, listing_id)
 SELECT (current_date + 120 + offs)::date,
        'available'::availability_status,
-       l.id
-FROM listings l
+       lli.listing_id
+FROM load_listing_ids lli
          JOIN params p ON true
          CROSS JOIN generate_series(1, p.days_per_listing) AS offs
-WHERE l.description LIKE 'Load listing #%'
 ON CONFLICT (listing_id, available_date) DO NOTHING;
 
 -- 8) Нагрузочные бронирования:
@@ -194,9 +205,8 @@ WITH guest_meta AS (SELECT count(*)::bigint AS cnt
                                d.listing_id,
                                d.available_date
                         FROM listing_availability_days d
-                                 JOIN listings l ON l.id = d.listing_id
-                        WHERE l.description LIKE 'Load listing #%'
-                          AND d.status = 'available'
+                                 JOIN load_listing_ids lli ON lli.listing_id = d.listing_id
+                        WHERE d.status = 'available'
                           AND d.available_date BETWEEN current_date + 121 AND current_date + 150
                           -- Берем примерно половину дат по каждому листингу.
                           AND ((d.available_date - (current_date + 120)) % 2 = 0)),
@@ -377,9 +387,8 @@ ON CONFLICT (booking_id) DO NOTHING;
 UPDATE base_prices bp
 SET amount_in_minor  = bp.amount_in_minor + 111,
     last_update_date = now()
-FROM listings l
-WHERE bp.listing_id = l.id
-  AND l.description LIKE 'Load listing #%'
-  AND (l.id % 10 = 0);
+FROM load_listing_ids lli
+WHERE bp.listing_id = lli.listing_id
+  AND (lli.listing_id % 10 = 0);
 
 COMMIT;
