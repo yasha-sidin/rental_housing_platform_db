@@ -9,8 +9,11 @@ COMPOSE := docker compose
 # --rm удаляет контейнер после выполнения команды.
 MIGRATE_RUNNER := $(COMPOSE) run --rm migration_runner
 
+# Количество строк для нагрузочного сида по умолчанию.
+N ?= 1000
+
 # Список целей, которые не являются именами файлов.
-.PHONY: up down restart logs ps db-shell migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto
+.PHONY: up down restart logs ps db-shell migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto seed-run seed-load seed-clean seed-reset
 
 # Поднять только PostgreSQL-сервис в фоне.
 up:
@@ -77,3 +80,22 @@ ifndef VERSION
 	$(error VERSION is required, example: make migrate-goto VERSION=8)
 endif
 	$(MIGRATE_RUNNER) /app/run_migrate.sh goto $(VERSION)
+
+# Прогон базовых сидов в детерминированном порядке.
+seed-run:
+	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/001_reference.sql'
+	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/002_base_entities.sql'
+	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/003_scenarios.sql'
+
+# Нагрузочный сид. По умолчанию N=1000, можно переопределить:
+# make seed-load N=5000
+seed-load:
+	@powershell -NoProfile -Command "if ([int]'$(N)' -gt 100000) { Write-Error 'N=$(N) is too large for local run. Max allowed is 100000.'; exit 1 }"
+	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -v rows=$(N) -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/004_load.sql'
+
+# Очистка load-данных.
+seed-clean:
+	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/999_cleanup.sql'
+
+# Полный пересозданный цикл: чистая БД -> миграции -> базовые сиды.
+seed-reset: down up migrate-up seed-run

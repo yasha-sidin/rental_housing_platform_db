@@ -7,6 +7,7 @@ services:
       - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/seeds:/workspace/db/seeds:ro
     ports:
       - "5488:5432"
 
