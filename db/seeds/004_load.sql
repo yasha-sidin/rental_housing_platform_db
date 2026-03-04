@@ -177,15 +177,22 @@ CREATE TEMP TABLE load_booking_plan
     booking_id           BIGINT
 );
 
-WITH guest_pool AS (SELECT u.id,
-                           row_number() OVER (ORDER BY u.id) AS rn,
-                           count(*) OVER ()                  AS cnt
-                    FROM users u
-                    WHERE u.username LIKE 'load_guest_%'),
-     candidate_days AS (SELECT d.id                                                                    AS day_id,
+CREATE TEMP TABLE load_guest_pool
+(
+    rn       BIGINT PRIMARY KEY,
+    guest_id BIGINT NOT NULL
+);
+
+INSERT INTO load_guest_pool (rn, guest_id)
+SELECT row_number() OVER (ORDER BY u.id), u.id
+FROM users u
+WHERE u.username LIKE 'load_guest_%';
+
+WITH guest_meta AS (SELECT count(*)::bigint AS cnt
+                    FROM load_guest_pool),
+     candidate_days AS (SELECT d.id AS day_id,
                                d.listing_id,
-                               d.available_date,
-                               row_number() OVER (PARTITION BY d.listing_id ORDER BY d.available_date) AS rn_per_listing
+                               d.available_date
                         FROM listing_availability_days d
                                  JOIN listings l ON l.id = d.listing_id
                         WHERE l.description LIKE 'Load listing #%'
@@ -196,15 +203,17 @@ WITH guest_pool AS (SELECT u.id,
      plan_source AS (SELECT cd.listing_id,
                             cd.day_id,
                             l.owner_id,
-                            gp.id AS guest_id,
+                            gp.guest_id,
                             bp.currency_id,
                             bp.amount_in_minor,
-                            cd.rn_per_listing
+                            -- Стабильный "seed" для распределения статусов/сумм без оконных функций.
+                            (cd.day_id + cd.listing_id) AS distribution_seed
                      FROM candidate_days cd
                               JOIN listings l ON l.id = cd.listing_id
                               JOIN base_prices bp ON bp.listing_id = l.id
-                              JOIN guest_pool gp
-                                   ON gp.rn = ((cd.rn_per_listing - 1) % gp.cnt) + 1)
+                              JOIN guest_meta gm ON gm.cnt > 0
+                              JOIN load_guest_pool gp
+                                   ON gp.rn = ((cd.day_id - 1) % gm.cnt) + 1)
 INSERT
 INTO load_booking_plan
 (listing_id,
@@ -223,10 +232,10 @@ SELECT ps.listing_id,
        ps.owner_id,
        ps.currency_id,
        -- Небольшая вариативность итоговой суммы.
-       ps.amount_in_minor + ((ps.rn_per_listing % 5) * 100),
+       ps.amount_in_minor + ((ps.distribution_seed % 5) * 100),
        -- Уникализируем expires_at микросекундами, оставаясь в 5-минутном окне.
        now() + interval '4 minutes' + ((ps.day_id % 1000000)::text || ' microseconds')::interval,
-       CASE (ps.rn_per_listing % 6)
+       CASE (ps.distribution_seed % 6)
            WHEN 0 THEN 'completed'::booking_status
            WHEN 1 THEN 'confirmed'::booking_status
            WHEN 2 THEN 'payment_pending'::booking_status
@@ -235,14 +244,14 @@ SELECT ps.listing_id,
            ELSE 'expired'::booking_status
            END,
        CASE
-           WHEN (ps.rn_per_listing % 6) = 4
-               THEN CASE WHEN (ps.rn_per_listing % 2) = 0 THEN ps.guest_id ELSE ps.owner_id END
+           WHEN (ps.distribution_seed % 6) = 4
+               THEN CASE WHEN (ps.distribution_seed % 2) = 0 THEN ps.guest_id ELSE ps.owner_id END
            ELSE NULL
            END,
        CASE
-           WHEN (ps.rn_per_listing % 6) = 4
+           WHEN (ps.distribution_seed % 6) = 4
                THEN CASE
-                        WHEN (ps.rn_per_listing % 2) = 0
+                        WHEN (ps.distribution_seed % 2) = 0
                             THEN 'guest changed plans (load)'
                         ELSE 'owner maintenance issue (load)'
                END
@@ -289,7 +298,7 @@ WHERE b.listing_id = p.listing_id
                      WHEN p.target_status IN ('confirmed', 'completed') THEN 'confirmed'::booking_status
                      WHEN p.target_status = 'payment_pending' THEN 'payment_pending'::booking_status
                      ELSE 'created'::booking_status
-      END
+    END
   AND b.total_amount_in_minor = p.amount_in_minor;
 
 -- Привязываем выбранные даты к бронированиям.
