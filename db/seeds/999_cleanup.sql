@@ -21,4 +21,4 @@ TRUNCATE TABLE
     public.countries,
     public.currencies,
     public.object_types
-RESTART IDENTITY CASCADE;
+    RESTART IDENTITY CASCADE;

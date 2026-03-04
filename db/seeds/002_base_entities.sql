@@ -40,7 +40,7 @@ ON CONFLICT (username) DO NOTHING;
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u
-JOIN roles r ON r.name = 'owner'
+         JOIN roles r ON r.name = 'owner'
 WHERE u.username IN ('seed_owner_1', 'seed_owner_2', 'seed_owner_3', 'seed_owner_4', 'seed_power_user')
 ON CONFLICT (user_id, role_id) DO NOTHING;
 
@@ -48,15 +48,17 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u
-JOIN roles r ON r.name = 'guest'
-WHERE u.username IN ('seed_guest_1', 'seed_guest_2', 'seed_guest_3', 'seed_guest_4', 'seed_guest_5', 'seed_guest_blocked', 'seed_guest_pending', 'seed_power_user')
+         JOIN roles r ON r.name = 'guest'
+WHERE u.username IN
+      ('seed_guest_1', 'seed_guest_2', 'seed_guest_3', 'seed_guest_4', 'seed_guest_5', 'seed_guest_blocked',
+       'seed_guest_pending', 'seed_power_user')
 ON CONFLICT (user_id, role_id) DO NOTHING;
 
 -- Администратор: админ-аккаунты.
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u
-JOIN roles r ON r.name = 'admin'
+         JOIN roles r ON r.name = 'admin'
 WHERE u.username IN ('seed_admin_1', 'seed_admin_2')
 ON CONFLICT (user_id, role_id) DO NOTHING;
 
@@ -66,26 +68,24 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 -- Добавляем адреса в разных странах/городах для географически разнообразной выборки.
 INSERT INTO addresses (city_id, street_line1, street_line2, region, postal_code, link)
 SELECT c.id, v.street_line1, v.street_line2, v.region, v.postal_code, v.link
-FROM (VALUES
-         ('US', 'New York',         '5th Avenue, 1',           NULL,              'NY',  '10001', 'https://maps.example/ny-1'),
-         ('US', 'San Francisco',    'Market Street, 221',      'Apt 12',          'CA',  '94103', 'https://maps.example/sf-1'),
-         ('DE', 'Berlin',           'Unter den Linden, 10',    NULL,              'BE',  '10117', 'https://maps.example/berlin-1'),
-         ('RU', 'Moscow',           'Tverskaya, 7',            'Building A',      'MOW', '125009', 'https://maps.example/msk-1'),
-         ('GB', 'London',           'Soho Square, 8',          NULL,              'LND', 'W1D 3QD', 'https://maps.example/london-1'),
-         ('FR', 'Paris',            'Rue de Rivoli, 101',      NULL,              'IDF', '75001', 'https://maps.example/paris-1'),
-         ('JP', 'Tokyo',            'Shinjuku 3-15-11',        'Tower 2',         'TK',  '160-0022', 'https://maps.example/tokyo-1'),
-         ('AE', 'Dubai',            'Marina Walk, 42',         'Suite 1901',      'DU',  '00000', 'https://maps.example/dubai-1'),
-         ('ES', 'Barcelona',        'Passeig de Gracia, 55',   NULL,              'CAT', '08007', 'https://maps.example/barcelona-1'),
-         ('IT', 'Rome',             'Via del Corso, 120',      NULL,              'RM',  '00186', 'https://maps.example/rome-1')
-     ) AS v(country_code, city_name, street_line1, street_line2, region, postal_code, link)
-JOIN countries co ON co.code = v.country_code
-JOIN cities c ON c.country_id = co.id AND c.name = v.city_name
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM addresses a
-    WHERE a.city_id = c.id
-      AND a.street_line1 = v.street_line1
-);
+FROM (VALUES ('US', 'New York', '5th Avenue, 1', NULL, 'NY', '10001', 'https://maps.example/ny-1'),
+             ('US', 'San Francisco', 'Market Street, 221', 'Apt 12', 'CA', '94103', 'https://maps.example/sf-1'),
+             ('DE', 'Berlin', 'Unter den Linden, 10', NULL, 'BE', '10117', 'https://maps.example/berlin-1'),
+             ('RU', 'Moscow', 'Tverskaya, 7', 'Building A', 'MOW', '125009', 'https://maps.example/msk-1'),
+             ('GB', 'London', 'Soho Square, 8', NULL, 'LND', 'W1D 3QD', 'https://maps.example/london-1'),
+             ('FR', 'Paris', 'Rue de Rivoli, 101', NULL, 'IDF', '75001', 'https://maps.example/paris-1'),
+             ('JP', 'Tokyo', 'Shinjuku 3-15-11', 'Tower 2', 'TK', '160-0022', 'https://maps.example/tokyo-1'),
+             ('AE', 'Dubai', 'Marina Walk, 42', 'Suite 1901', 'DU', '00000', 'https://maps.example/dubai-1'),
+             ('ES', 'Barcelona', 'Passeig de Gracia, 55', NULL, 'CAT', '08007', 'https://maps.example/barcelona-1'),
+             ('IT', 'Rome', 'Via del Corso, 120', NULL, 'RM', '00186',
+              'https://maps.example/rome-1')) AS v(country_code, city_name, street_line1, street_line2, region,
+                                                   postal_code, link)
+         JOIN countries co ON co.code = v.country_code
+         JOIN cities c ON c.country_id = co.id AND c.name = v.city_name
+WHERE NOT EXISTS (SELECT 1
+                  FROM addresses a
+                  WHERE a.city_id = c.id
+                    AND a.street_line1 = v.street_line1);
 
 -- ============================================================================
 -- 4. Объявления (listings)
@@ -100,27 +100,25 @@ SELECT u.id,
        v.rooms,
        v.description,
        v.status::listing_publication_status
-FROM (VALUES
-         ('seed_owner_1', 'apartment',  '5th Avenue, 1',         2, 1, 'Seed listing NY Manhattan',      'active'),
-         ('seed_owner_1', 'studio',     'Market Street, 221',    2, 1, 'Seed listing SF Downtown',       'active'),
-         ('seed_owner_2', 'house',      'Unter den Linden, 10',  6, 4, 'Seed listing Berlin Mitte',      'active'),
-         ('seed_owner_3', 'loft',       'Rue de Rivoli, 101',    4, 2, 'Seed listing Paris Rivoli',      'active'),
-         ('seed_owner_2', 'townhouse',  'Soho Square, 8',        5, 3, 'Seed listing London Soho',       'active'),
-         ('seed_owner_4', 'villa',      'Marina Walk, 42',       8, 5, 'Seed listing Dubai Marina',      'active'),
-         ('seed_owner_3', 'apartment',  'Tverskaya, 7',          3, 2, 'Seed listing Moscow Center',     'hidden'),
-         ('seed_owner_4', 'studio',     'Shinjuku 3-15-11',      2, 1, 'Seed listing Tokyo Shinjuku',    'blocked'),
-         ('seed_power_user', 'guesthouse', 'Passeig de Gracia, 55', 4, 2, 'Seed listing Barcelona Center', 'active'),
-         ('seed_power_user', 'cabin',   'Via del Corso, 120',    3, 2, 'Seed listing Rome Corso',        'hidden')
-     ) AS v(owner_username, object_type_name, street_line1, capacity, rooms, description, status)
-JOIN users u ON u.username = v.owner_username
-JOIN object_types ot ON ot.name = v.object_type_name
-JOIN addresses a ON a.street_line1 = v.street_line1
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM listings l
-    WHERE l.owner_id = u.id
-      AND l.address_id = a.id
-);
+FROM (VALUES ('seed_owner_1', 'apartment', '5th Avenue, 1', 2, 1, 'Seed listing NY Manhattan', 'active'),
+             ('seed_owner_1', 'studio', 'Market Street, 221', 2, 1, 'Seed listing SF Downtown', 'active'),
+             ('seed_owner_2', 'house', 'Unter den Linden, 10', 6, 4, 'Seed listing Berlin Mitte', 'active'),
+             ('seed_owner_3', 'loft', 'Rue de Rivoli, 101', 4, 2, 'Seed listing Paris Rivoli', 'active'),
+             ('seed_owner_2', 'townhouse', 'Soho Square, 8', 5, 3, 'Seed listing London Soho', 'active'),
+             ('seed_owner_4', 'villa', 'Marina Walk, 42', 8, 5, 'Seed listing Dubai Marina', 'active'),
+             ('seed_owner_3', 'apartment', 'Tverskaya, 7', 3, 2, 'Seed listing Moscow Center', 'hidden'),
+             ('seed_owner_4', 'studio', 'Shinjuku 3-15-11', 2, 1, 'Seed listing Tokyo Shinjuku', 'blocked'),
+             ('seed_power_user', 'guesthouse', 'Passeig de Gracia, 55', 4, 2, 'Seed listing Barcelona Center',
+              'active'),
+             ('seed_power_user', 'cabin', 'Via del Corso, 120', 3, 2, 'Seed listing Rome Corso',
+              'hidden')) AS v(owner_username, object_type_name, street_line1, capacity, rooms, description, status)
+         JOIN users u ON u.username = v.owner_username
+         JOIN object_types ot ON ot.name = v.object_type_name
+         JOIN addresses a ON a.street_line1 = v.street_line1
+WHERE NOT EXISTS (SELECT 1
+                  FROM listings l
+                  WHERE l.owner_id = u.id
+                    AND l.address_id = a.id);
 
 -- ============================================================================
 -- 5. Фото объявлений
@@ -137,29 +135,28 @@ VALUES ('jpeg', 'https://images.example/ny-manhattan-1.jpg'),
        ('jpeg', 'https://images.example/paris-rivoli-1.jpg'),
        ('jpeg', 'https://images.example/london-soho-1.jpg'),
        ('jpeg', 'https://images.example/dubai-marina-1.jpg'),
-       ('png',  'https://images.example/moscow-center-1.png'),
-       ('png',  'https://images.example/tokyo-shinjuku-1.png'),
+       ('png', 'https://images.example/moscow-center-1.png'),
+       ('png', 'https://images.example/tokyo-shinjuku-1.png'),
        ('jpeg', 'https://images.example/barcelona-center-1.jpg')
 ON CONFLICT (link) DO NOTHING;
 
 INSERT INTO listing_photos (listing_id, photo_id, slot)
 SELECT l.id, p.id, v.slot
-FROM (VALUES
-         ('Seed listing NY Manhattan',   'https://images.example/ny-manhattan-1.jpg',    1),
-         ('Seed listing NY Manhattan',   'https://images.example/ny-manhattan-2.jpg',    2),
-         ('Seed listing SF Downtown',    'https://images.example/sf-downtown-1.jpg',     1),
-         ('Seed listing SF Downtown',    'https://images.example/sf-downtown-2.jpg',     2),
-         ('Seed listing Berlin Mitte',   'https://images.example/berlin-mitte-1.jpg',    1),
-         ('Seed listing Berlin Mitte',   'https://images.example/berlin-mitte-2.jpg',    2),
-         ('Seed listing Paris Rivoli',   'https://images.example/paris-rivoli-1.jpg',    1),
-         ('Seed listing London Soho',    'https://images.example/london-soho-1.jpg',     1),
-         ('Seed listing Dubai Marina',   'https://images.example/dubai-marina-1.jpg',    1),
-         ('Seed listing Moscow Center',  'https://images.example/moscow-center-1.png',   1),
-         ('Seed listing Tokyo Shinjuku', 'https://images.example/tokyo-shinjuku-1.png',  1),
-         ('Seed listing Barcelona Center','https://images.example/barcelona-center-1.jpg',1)
-     ) AS v(listing_description, photo_link, slot)
-JOIN listings l ON l.description = v.listing_description
-JOIN photos p ON p.link = v.photo_link
+FROM (VALUES ('Seed listing NY Manhattan', 'https://images.example/ny-manhattan-1.jpg', 1),
+             ('Seed listing NY Manhattan', 'https://images.example/ny-manhattan-2.jpg', 2),
+             ('Seed listing SF Downtown', 'https://images.example/sf-downtown-1.jpg', 1),
+             ('Seed listing SF Downtown', 'https://images.example/sf-downtown-2.jpg', 2),
+             ('Seed listing Berlin Mitte', 'https://images.example/berlin-mitte-1.jpg', 1),
+             ('Seed listing Berlin Mitte', 'https://images.example/berlin-mitte-2.jpg', 2),
+             ('Seed listing Paris Rivoli', 'https://images.example/paris-rivoli-1.jpg', 1),
+             ('Seed listing London Soho', 'https://images.example/london-soho-1.jpg', 1),
+             ('Seed listing Dubai Marina', 'https://images.example/dubai-marina-1.jpg', 1),
+             ('Seed listing Moscow Center', 'https://images.example/moscow-center-1.png', 1),
+             ('Seed listing Tokyo Shinjuku', 'https://images.example/tokyo-shinjuku-1.png', 1),
+             ('Seed listing Barcelona Center', 'https://images.example/barcelona-center-1.jpg',
+              1)) AS v(listing_description, photo_link, slot)
+         JOIN listings l ON l.description = v.listing_description
+         JOIN photos p ON p.link = v.photo_link
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -168,24 +165,22 @@ ON CONFLICT DO NOTHING;
 -- По одному базовому прайсу на объявление (base_prices.listing_id UNIQUE).
 INSERT INTO base_prices (currency_id, amount_in_minor, listing_id)
 SELECT c.id, v.amount_in_minor, l.id
-FROM (VALUES
-         ('USD', 18000,  'Seed listing NY Manhattan'),
-         ('USD', 14000,  'Seed listing SF Downtown'),
-         ('EUR', 21000,  'Seed listing Berlin Mitte'),
-         ('EUR', 19000,  'Seed listing Paris Rivoli'),
-         ('GBP', 23000,  'Seed listing London Soho'),
-         ('AED', 75000,  'Seed listing Dubai Marina'),
-         ('RUB', 850000, 'Seed listing Moscow Center'),
-         ('JPY', 1800000,'Seed listing Tokyo Shinjuku'),
-         ('EUR', 16000,  'Seed listing Barcelona Center'),
-         ('EUR', 13000,  'Seed listing Rome Corso')
-     ) AS v(currency_code, amount_in_minor, listing_description)
-JOIN currencies c ON c.code = v.currency_code
-JOIN listings l ON l.description = v.listing_description
+FROM (VALUES ('USD', 18000, 'Seed listing NY Manhattan'),
+             ('USD', 14000, 'Seed listing SF Downtown'),
+             ('EUR', 21000, 'Seed listing Berlin Mitte'),
+             ('EUR', 19000, 'Seed listing Paris Rivoli'),
+             ('GBP', 23000, 'Seed listing London Soho'),
+             ('AED', 75000, 'Seed listing Dubai Marina'),
+             ('RUB', 850000, 'Seed listing Moscow Center'),
+             ('JPY', 1800000, 'Seed listing Tokyo Shinjuku'),
+             ('EUR', 16000, 'Seed listing Barcelona Center'),
+             ('EUR', 13000, 'Seed listing Rome Corso')) AS v(currency_code, amount_in_minor, listing_description)
+         JOIN currencies c ON c.code = v.currency_code
+         JOIN listings l ON l.description = v.listing_description
 ON CONFLICT (listing_id) DO UPDATE
-SET currency_id = EXCLUDED.currency_id,
-    amount_in_minor = EXCLUDED.amount_in_minor,
-    last_update_date = now();
+    SET currency_id      = EXCLUDED.currency_id,
+        amount_in_minor  = EXCLUDED.amount_in_minor,
+        last_update_date = now();
 
 -- ============================================================================
 -- 7. Доступность по дням
@@ -196,7 +191,7 @@ SELECT gs::date,
        'available'::availability_status,
        l.id
 FROM listings l
-CROSS JOIN generate_series(current_date + 1, current_date + 90, interval '1 day') AS gs
+         CROSS JOIN generate_series(current_date + 1, current_date + 90, interval '1 day') AS gs
 WHERE l.status = 'active'
 ON CONFLICT (listing_id, available_date) DO NOTHING;
 
@@ -207,14 +202,14 @@ SELECT gs::date,
        'blocked'::availability_status,
        l.id
 FROM listings l
-CROSS JOIN generate_series(current_date + 1, current_date + 45, interval '1 day') AS gs
+         CROSS JOIN generate_series(current_date + 1, current_date + 45, interval '1 day') AS gs
 WHERE l.status IN ('hidden', 'blocked')
 ON CONFLICT (listing_id, available_date) DO NOTHING;
 
 -- Периодические блокировки для активных объявлений (техобслуживание/уборка):
 -- каждая 10-я дата на горизонте переводится в blocked.
 UPDATE listing_availability_days d
-SET status = 'blocked',
+SET status           = 'blocked',
     last_update_date = now()
 FROM listings l
 WHERE d.listing_id = l.id
@@ -227,17 +222,15 @@ WHERE d.listing_id = l.id
 -- если заполнено, действует дневная спец-цена.
 UPDATE listing_availability_days d
 SET override_currency_id = c.id,
-    override_in_minor = bp.amount_in_minor + v.delta_in_minor,
-    last_update_date = now()
+    override_in_minor    = bp.amount_in_minor + v.delta_in_minor,
+    last_update_date     = now()
 FROM listings l
-JOIN base_prices bp ON bp.listing_id = l.id
-JOIN currencies c ON c.id = bp.currency_id
-JOIN (VALUES
-         ('Seed listing NY Manhattan', 3000),
-         ('Seed listing Berlin Mitte', 2500),
-         ('Seed listing Dubai Marina', 10000)
-     ) AS v(listing_description, delta_in_minor)
-  ON v.listing_description = l.description
+         JOIN base_prices bp ON bp.listing_id = l.id
+         JOIN currencies c ON c.id = bp.currency_id
+         JOIN (VALUES ('Seed listing NY Manhattan', 3000),
+                      ('Seed listing Berlin Mitte', 2500),
+                      ('Seed listing Dubai Marina', 10000)) AS v(listing_description, delta_in_minor)
+              ON v.listing_description = l.description
 WHERE d.listing_id = l.id
   AND d.status = 'available'
   AND EXTRACT(ISODOW FROM d.available_date) IN (5, 6)
