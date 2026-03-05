@@ -80,6 +80,16 @@ L- artifacts/
 - `make migrate-version` - показать текущую версию миграций.
 - `make migrate-goto VERSION=N` - перейти к целевой версии.
 - `make migrate-force VERSION=N` - принудительно установить версию (аварийная операция).
+### Сиды (тестовые данные)
+
+- `make seed-run` - загрузить базовые сиды (`001..003`).
+- `make seed-load N=1000` - загрузить массовые данные (по умолчанию `N=1000`, максимум `N=100000`).
+- `make seed-clean` - очистить все данные, добавленные seed-скриптами (миграционные таблицы не затрагиваются).
+- `make seed-reset` - пересоздать БД, применить миграции и загрузить базовые сиды.
+
+`seed-load` расширяет нагрузку сразу на несколько таблиц:
+`users`, `user_roles`, `addresses`, `listings`, `photos`, `listing_photos`, `base_prices`,
+`listing_availability_days`, `price_history`.
 
 ## Где что хранится
 
