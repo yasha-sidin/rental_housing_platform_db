@@ -123,10 +123,9 @@ CREATE INDEX idx_payments_status_session_expires_at
 
 -- Таблица reviews
 -- booking_id - UNIQUE, поэтому быстрый доступ к отзыву по конкретному бронированию уже обеспечен.
--- Создаем partial index под очередь модерации:
+-- Создаем частичный индекс под очередь модерации:
 -- WHERE moderated = false ORDER BY creation_date.
--- В индекс попадают только немодерированные отзывы, что уменьшает размер и ускоряет выборку очереди.
+-- В индекс попадают только отзывы, не прошедшие модерацию, что уменьшает его размер и ускоряет выборку очереди.
 CREATE INDEX idx_reviews_unmoderated_creation_date
     ON reviews (creation_date)
     WHERE moderated = false;
-
