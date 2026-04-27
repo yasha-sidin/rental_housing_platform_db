@@ -37,6 +37,22 @@
   - down: `db/rollback/U...sql`.
 - Внутри `migration_runner` перед запуском происходит конвертация во временный формат `*.up.sql` / `*.down.sql`.
 
+## Схемы, роли и табличные пространства
+
+- Прикладные объекты проекта после `V010` живут в схеме `application`.
+- Схема `public` остается для служебных объектов PostgreSQL и migration tool, включая `schema_migrations`.
+- Доступ к `application` выдается через групповые роли `app_readonly`, `app_readwrite`, `app_owner`.
+- Роли `app_*` являются `NOLOGIN`: пароли задаются только конкретным login-пользователям, которым затем выдается нужная групповая роль.
+- Табличные пространства создаются bootstrap-скриптом `db/bootstrap/001__create_tablespaces.sql`, потому что `CREATE TABLESPACE` относится к уровню PostgreSQL-кластера.
+- Директории tablespaces готовит кастомный PostgreSQL-контейнер из `docker/postgres/` до старта сервера.
+- В Docker Compose каждый tablespace подключен как отдельный named volume, что моделирует размещение на разных физических дисках.
+- `V011__assign_application_tablespaces.sql` распределяет таблицы и индексы `application` по tablespaces:
+  - `rental_reference_ts` - справочники и RBAC;
+  - `rental_core_ts` - пользователи, адреса, объявления, фотографии, базовые цены;
+  - `rental_booking_ts` - календарь доступности, бронирования, платежи;
+  - `rental_history_ts` - история цен и отзывы;
+  - `rental_index_ts` - индексы.
+
 ## Доменные области
 
 1. Пользователи.

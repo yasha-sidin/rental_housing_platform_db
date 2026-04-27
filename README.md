@@ -25,6 +25,9 @@ rental_housing_platform_db/
 +- .env
 +- README.md
 +- docker/
+¦  +- postgres/
+¦  ¦  +- Dockerfile
+¦  ¦  L- ensure_tablespaces.sh
 ¦  L- migrations/
 ¦     +- Dockerfile
 ¦     +- prepare_migrations.sh
@@ -37,6 +40,7 @@ rental_housing_platform_db/
 ¦  +- 04_business_tasks_catalog.md
 ¦  L- erd/
 +- db/
+¦  +- bootstrap/
 ¦  +- migrations/
 ¦  +- rollback/
 ¦  +- seeds/
@@ -53,13 +57,23 @@ L- artifacts/
 
 Миграции выполняются только через отдельный контейнер `migration_runner` и `golang-migrate`.
 
+Перед применением миграций выполняется cluster-level bootstrap табличных пространств:
+
+- кастомный PostgreSQL-контейнер из `docker/postgres/` при старте проверяет и создает директории для tablespaces;
+- каждый tablespace смонтирован отдельным Docker named volume, что моделирует раздельные физические диски;
+- `db/bootstrap/001__create_tablespaces.sql` идемпотентно создает tablespaces, если их еще нет;
+- `V011__assign_application_tablespaces.sql` распределяет таблицы и индексы схемы `application` по tablespaces.
+
+Bootstrap отделен от обычных миграций, потому что `CREATE TABLESPACE` работает на уровне PostgreSQL-кластера, требует существующий путь на сервере БД и не выполняется внутри transaction block.
+
 Важно:
 
 - исходные файлы в репозитории не переименовываются:
   - up-миграции: `db/migrations/V...sql`;
   - down-миграции: `db/rollback/U...sql`;
 - перед запуском утилиты внутри контейнера они конвертируются во временный формат `*.up.sql` / `*.down.sql`;
-- состояние версий хранится в стандартной таблице `schema_migrations`, которую ведет `golang-migrate`.
+- состояние версий хранится в стандартной таблице `schema_migrations`, которую ведет `golang-migrate`;
+- `schema_migrations` остается служебной таблицей migration tool и не переносится в прикладную схему `application`.
 
 ## Команды Makefile
 
@@ -70,11 +84,13 @@ L- artifacts/
 - `make restart` - перезапуск PostgreSQL.
 - `make logs` - логи PostgreSQL.
 - `make ps` - список сервисов.
+- `make db-wait` - дождаться готовности PostgreSQL к подключениям.
+- `make bootstrap-tablespaces` - создать PostgreSQL tablespaces, если они еще не созданы.
 
 ### Миграции
 
 - `make migrate-check` - проверить парность `V/U` без применения миграций.
-- `make migrate-up` - применить все pending миграции.
+- `make migrate-up` - поднять PostgreSQL, выполнить bootstrap tablespaces и применить все pending миграции.
 - `make migrate-down-one` - откатить одну миграцию.
 - `make migrate-down STEPS=N` - откатить `N` миграций.
 - `make migrate-version` - показать текущую версию миграций.
@@ -95,7 +111,9 @@ L- artifacts/
 
 - `docker-compose.yaml` - локальный запуск PostgreSQL и migration-runner.
 - `Makefile` - единая точка входа для запуска БД и миграций.
+- `docker/postgres/` - кастомный PostgreSQL-образ, который готовит директории tablespaces перед стартом БД.
 - `docker/migrations/` - Dockerfile и скрипты контейнера миграций.
+- `db/bootstrap/` - cluster-level SQL bootstrap для объектов, которые не являются обычными миграциями приложения.
 - `.env` - параметры окружения для контейнеров.
 - `docs/` - текстовая документация проекта.
 - `docs/00_technical_specification.md` - полная версия технического задания (единый источник требований).
