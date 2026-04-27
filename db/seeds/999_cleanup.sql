@@ -4,21 +4,21 @@
 -- намеренно НЕ очищаются.
 
 TRUNCATE TABLE
-    public.reviews,
-    public.payments,
-    public.booking_days,
-    public.bookings,
-    public.price_history,
-    public.listing_availability_days,
-    public.base_prices,
-    public.listing_photos,
-    public.photos,
-    public.listings,
-    public.addresses,
-    public.user_roles,
-    public.users,
-    public.cities,
-    public.countries,
-    public.currencies,
-    public.object_types
+    application.reviews,
+    application.payments,
+    application.booking_days,
+    application.bookings,
+    application.price_history,
+    application.listing_availability_days,
+    application.base_prices,
+    application.listing_photos,
+    application.photos,
+    application.listings,
+    application.addresses,
+    application.user_roles,
+    application.users,
+    application.cities,
+    application.countries,
+    application.currencies,
+    application.object_types
     RESTART IDENTITY CASCADE;

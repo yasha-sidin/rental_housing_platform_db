@@ -8,12 +8,13 @@ COMPOSE := docker compose
 # Шаблон запуска одноразового контейнера миграций.
 # --rm удаляет контейнер после выполнения команды.
 MIGRATE_RUNNER := $(COMPOSE) run --rm migration_runner
+MIGRATE_RUNNER_NO_DEPS := $(COMPOSE) run --rm --no-deps migration_runner
 
 # Количество строк для нагрузочного сида по умолчанию.
 N ?= 1000
 
 # Список целей, которые не являются именами файлов.
-.PHONY: up down restart logs ps db-shell migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto seed-run seed-load seed-clean seed-reset
+.PHONY: up down restart logs ps db-shell db-wait bootstrap-tablespaces migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto seed-run seed-load seed-clean seed-reset
 
 # Поднять только PostgreSQL-сервис в фоне.
 up:
@@ -34,18 +35,24 @@ logs:
 ps:
 	$(COMPOSE) ps
 
+db-wait: up
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'until pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"; do sleep 1; done'
+
 # Открыть psql внутри контейнера БД.
 # Переменные POSTGRES_USER/POSTGRES_DB берутся из env контейнера.
 db-shell:
 	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
+bootstrap-tablespaces: db-wait
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/bootstrap/001__create_tablespaces.sql'
+
 # Проверка парности и корректности формата V/U миграций
 # без применения изменений в БД.
 migrate-check:
-	$(MIGRATE_RUNNER) /app/prepare_migrations.sh --check-only
+	$(MIGRATE_RUNNER_NO_DEPS) /app/prepare_migrations.sh --check-only
 
 # Применить все pending миграции вверх.
-migrate-up:
+migrate-up: bootstrap-tablespaces
 	$(MIGRATE_RUNNER) /app/run_migrate.sh up
 
 # Откатить ровно одну миграцию вниз.
@@ -82,20 +89,20 @@ endif
 	$(MIGRATE_RUNNER) /app/run_migrate.sh goto $(VERSION)
 
 # Прогон базовых сидов в детерминированном порядке.
-seed-run:
-	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/001_reference.sql'
-	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/002_base_entities.sql'
-	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/003_scenarios.sql'
+seed-run: db-wait
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/001_reference.sql'
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/002_base_entities.sql'
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/003_scenarios.sql'
 
 # Нагрузочный сид. По умолчанию N=1000, можно переопределить:
 # make seed-load N=5000
 seed-load:
 	@powershell -NoProfile -Command "if ([int]'$(N)' -gt 100000) { Write-Error 'N=$(N) is too large for local run. Max allowed is 100000.'; exit 1 }"
-	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -v rows=$(N) -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/004_load.sql'
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -v rows=$(N) -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/004_load.sql'
 
 # Очистка load-данных.
 seed-clean:
-	$(COMPOSE) exec rental_housing_platform_db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/999_cleanup.sql'
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/999_cleanup.sql'
 
 # Полный пересозданный цикл: чистая БД -> миграции -> базовые сиды.
 seed-reset: down up migrate-up seed-run

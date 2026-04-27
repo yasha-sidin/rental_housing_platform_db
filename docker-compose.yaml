@@ -1,15 +1,28 @@
 services:
   rental_housing_platform_db:
-    image: postgres:18-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     container_name: rental_housing_platform_db
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ts_reference:/var/lib/postgresql/tablespaces/rental_reference
+      - ts_core:/var/lib/postgresql/tablespaces/rental_core
+      - ts_booking:/var/lib/postgresql/tablespaces/rental_booking
+      - ts_history:/var/lib/postgresql/tablespaces/rental_history
+      - ts_index:/var/lib/postgresql/tablespaces/rental_index
+      - ./db/bootstrap:/workspace/db/bootstrap:ro
       - ./db/seeds:/workspace/db/seeds:ro
     ports:
       - "5488:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   migration_runner:
     build:
@@ -22,11 +35,22 @@ services:
       DB_PORT: 5432
       DB_SSLMODE: disable
     depends_on:
-      - rental_housing_platform_db
+      rental_housing_platform_db:
+        condition: service_healthy
     volumes:
       - ./db/migrations:/workspace/db/migrations:ro
       - ./db/rollback:/workspace/db/rollback:ro
 
 volumes:
   postgres_data:
+    driver: local
+  ts_reference:
+    driver: local
+  ts_core:
+    driver: local
+  ts_booking:
+    driver: local
+  ts_history:
+    driver: local
+  ts_index:
     driver: local
