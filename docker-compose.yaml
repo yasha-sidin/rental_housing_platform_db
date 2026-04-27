@@ -16,6 +16,8 @@ services:
       - ts_index:/var/lib/postgresql/tablespaces/rental_index
       - ./db/bootstrap:/workspace/db/bootstrap:ro
       - ./db/seeds:/workspace/db/seeds:ro
+      - ./sql:/workspace/sql:ro
+      - ./artifacts:/workspace/artifacts
     ports:
       - "5488:5432"
     healthcheck:
