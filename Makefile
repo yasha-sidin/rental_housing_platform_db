@@ -14,7 +14,7 @@ MIGRATE_RUNNER_NO_DEPS := $(COMPOSE) run --rm --no-deps migration_runner
 N ?= 1000
 
 # Список целей, которые не являются именами файлов.
-.PHONY: up down restart logs ps db-shell db-wait bootstrap-tablespaces migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto seed-run seed-load seed-clean seed-reset
+.PHONY: up down restart logs ps db-shell db-wait bootstrap-tablespaces migrate-check migrate-up migrate-down-one migrate-down migrate-version migrate-force migrate-goto seed-run seed-load seed-clean seed-reset dml-run
 
 # Поднять только PostgreSQL-сервис в фоне.
 up:
@@ -103,6 +103,13 @@ seed-load:
 # Очистка load-данных.
 seed-clean:
 	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/db/seeds/999_cleanup.sql'
+
+# Запустить один SQL-файл из каталога sql/ внутри PostgreSQL-контейнера.
+dml-run: db-wait
+ifndef FILE
+	$(error FILE is required, example: make dml-run FILE=sql/analytics/select_regex.sql)
+endif
+	$(COMPOSE) exec -T rental_housing_platform_db sh -c 'PGOPTIONS="-c search_path=application,public" psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /workspace/$(FILE)'
 
 # Полный пересозданный цикл: чистая БД -> миграции -> базовые сиды.
 seed-reset: down up migrate-up seed-run

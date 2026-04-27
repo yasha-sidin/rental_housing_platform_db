@@ -107,6 +107,15 @@ Bootstrap отделен от обычных миграций, потому чт
 `users`, `user_roles`, `addresses`, `listings`, `photos`, `listing_photos`, `base_prices`,
 `listing_availability_days`, `price_history`.
 
+### SQL-запросы
+
+- `make dml-run FILE=sql/analytics/select_regex.sql` - запустить один SQL-файл из каталога `sql/` внутри PostgreSQL-контейнера.
+
+Для домашнего задания по DML используются существующие каталоги:
+
+- `sql/analytics/` - SELECT, JOIN и COPY-примеры;
+- `sql/operational/` - INSERT, UPDATE и DELETE-примеры.
+
 ## Где что хранится
 
 - `docker-compose.yaml` - локальный запуск PostgreSQL и migration-runner.
@@ -126,8 +135,8 @@ Bootstrap отделен от обычных миграций, потому чт
 - `db/rollback/` - DDL down-миграции в исходном формате проекта.
 - `db/seeds/` - заполнение справочников и тестовых данных.
 - `db/tests/` - SQL-проверки ограничений и инвариантов.
-- `sql/operational/` - операционные SQL-запросы.
-- `sql/analytics/` - аналитические SQL-запросы.
+- `sql/operational/` - операционные SQL-запросы, включая DML-файлы для INSERT/UPDATE/DELETE.
+- `sql/analytics/` - аналитические SQL-запросы, включая DML-файлы для SELECT/JOIN/COPY.
 - `artifacts/explain/` - планы выполнения (`EXPLAIN`) ключевых запросов.
 - `artifacts/snapshots/` - снимки результатов для отчета/защиты.
 
