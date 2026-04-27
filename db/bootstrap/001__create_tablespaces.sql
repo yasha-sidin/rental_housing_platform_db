@@ -1,20 +1,20 @@
 -- 001__create_tablespaces.sql
 --
--- Cluster-level bootstrap for PostgreSQL tablespaces.
+-- Bootstrap табличных пространств PostgreSQL на уровне кластера.
 --
--- This file is intentionally not a normal application migration:
--- CREATE TABLESPACE works at PostgreSQL cluster level, requires a real server-side
--- filesystem path, and cannot run inside a transaction block.
+-- Этот файл намеренно не является обычной прикладной миграцией:
+-- CREATE TABLESPACE работает на уровне PostgreSQL-кластера, требует реальный
+-- server-side путь в файловой системе и не может выполняться внутри transaction block.
 --
--- Directories are prepared by the custom PostgreSQL container before server start:
+-- Директории подготавливает кастомный PostgreSQL-контейнер до старта сервера:
 --   /var/lib/postgresql/tablespaces/rental_reference
 --   /var/lib/postgresql/tablespaces/rental_core
 --   /var/lib/postgresql/tablespaces/rental_booking
 --   /var/lib/postgresql/tablespaces/rental_history
 --   /var/lib/postgresql/tablespaces/rental_index
 --
--- Idempotency is implemented with psql \gexec: the SELECT emits CREATE TABLESPACE
--- only if the tablespace is not already registered in pg_tablespace.
+-- Идемпотентность реализована через psql \gexec: SELECT генерирует CREATE TABLESPACE
+-- только если tablespace еще не зарегистрирован в pg_tablespace.
 
 \echo Creating PostgreSQL tablespaces when they are missing
 
