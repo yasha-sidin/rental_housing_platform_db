@@ -1,0 +1,26 @@
+﻿               name                |                    setting                     |       source       |                     sourcefile
+-----------------------------------+------------------------------------------------+--------------------+----------------------------------------------------
+ data_directory                    | /var/lib/postgresql/18/docker                  | override           |
+ hba_file                          | /etc/postgresql/logical-subscriber/pg_hba.conf | override           |
+ listen_addresses                  | *                                              | configuration file | /etc/postgresql/logical-subscriber/postgresql.conf
+ max_logical_replication_workers   | 4                                              | configuration file | /etc/postgresql/logical-subscriber/postgresql.conf
+ max_sync_workers_per_subscription | 2                                              | configuration file | /etc/postgresql/logical-subscriber/postgresql.conf
+(5 rows)
+
+                     sourcefile                     |               name                |                    setting                     | applied | error
+----------------------------------------------------+-----------------------------------+------------------------------------------------+---------+-------
+ /etc/postgresql/logical-subscriber/postgresql.conf | data_directory                    | /var/lib/postgresql/18/docker                  | t       |
+ /etc/postgresql/logical-subscriber/postgresql.conf | hba_file                          | /etc/postgresql/logical-subscriber/pg_hba.conf | t       |
+ /etc/postgresql/logical-subscriber/postgresql.conf | listen_addresses                  | *                                              | t       |
+ /etc/postgresql/logical-subscriber/postgresql.conf | max_logical_replication_workers   | 4                                              | t       |
+ /etc/postgresql/logical-subscriber/postgresql.conf | max_sync_workers_per_subscription | 2                                              | t       |
+ /etc/postgresql/logical-subscriber/postgresql.conf | unix_socket_directories           | /var/run/postgresql                            | t       |
+(6 rows)
+
+ line_number | type  | database | user_name |  address  |  auth_method  | error
+-------------+-------+----------+-----------+-----------+---------------+-------
+           2 | local | {all}    | {all}     |           | trust         |
+           5 | host  | {all}    | {all}     | 127.0.0.1 | scram-sha-256 |
+           6 | host  | {all}    | {all}     | ::1       | scram-sha-256 |
+           7 | host  | {all}    | {all}     | 0.0.0.0   | scram-sha-256 |
+(4 rows)

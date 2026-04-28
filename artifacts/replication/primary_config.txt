@@ -1,0 +1,31 @@
+﻿SET
+         name          |               setting               |       source       |               sourcefile
+-----------------------+-------------------------------------+--------------------+-----------------------------------------
+ data_directory        | /var/lib/postgresql/18/docker       | override           |
+ hba_file              | /etc/postgresql/primary/pg_hba.conf | override           |
+ listen_addresses      | *                                   | configuration file | /etc/postgresql/primary/postgresql.conf
+ max_replication_slots | 10                                  | configuration file | /etc/postgresql/primary/postgresql.conf
+ max_wal_senders       | 10                                  | configuration file | /etc/postgresql/primary/postgresql.conf
+ wal_level             | logical                             | configuration file | /etc/postgresql/primary/postgresql.conf
+(6 rows)
+
+               sourcefile                |          name           |               setting               | applied | error
+-----------------------------------------+-------------------------+-------------------------------------+---------+-------
+ /etc/postgresql/primary/postgresql.conf | data_directory          | /var/lib/postgresql/18/docker       | t       |
+ /etc/postgresql/primary/postgresql.conf | hba_file                | /etc/postgresql/primary/pg_hba.conf | t       |
+ /etc/postgresql/primary/postgresql.conf | listen_addresses        | *                                   | t       |
+ /etc/postgresql/primary/postgresql.conf | max_replication_slots   | 10                                  | t       |
+ /etc/postgresql/primary/postgresql.conf | max_wal_senders         | 10                                  | t       |
+ /etc/postgresql/primary/postgresql.conf | unix_socket_directories | /var/run/postgresql                 | t       |
+ /etc/postgresql/primary/postgresql.conf | wal_level               | logical                             | t       |
+(7 rows)
+
+ line_number | type  |   database    |       user_name       |  address  |  auth_method  | error
+-------------+-------+---------------+-----------------------+-----------+---------------+-------
+           2 | local | {all}         | {all}                 |           | trust         |
+           5 | host  | {all}         | {all}                 | 127.0.0.1 | scram-sha-256 |
+           6 | host  | {all}         | {all}                 | ::1       | scram-sha-256 |
+           7 | host  | {all}         | {all}                 | 0.0.0.0   | scram-sha-256 |
+          10 | host  | {replication} | {physical_replicator} | 0.0.0.0   | scram-sha-256 |
+          13 | host  | {all}         | {logical_replicator}  | 0.0.0.0   | scram-sha-256 |
+(6 rows)

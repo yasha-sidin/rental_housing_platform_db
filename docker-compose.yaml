@@ -7,6 +7,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      PGDATA: /var/lib/postgresql/18/docker
+      PHYSICAL_REPLICATION_USER: physical_replicator
+      LOGICAL_REPLICATION_USER: logical_replicator
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/primary/postgresql.conf
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ts_reference:/var/lib/postgresql/tablespaces/rental_reference
@@ -14,7 +22,9 @@ services:
       - ts_booking:/var/lib/postgresql/tablespaces/rental_booking
       - ts_history:/var/lib/postgresql/tablespaces/rental_history
       - ts_index:/var/lib/postgresql/tablespaces/rental_index
+      - ./docker/postgres/conf/primary:/etc/postgresql/primary:ro
       - ./db/bootstrap:/workspace/db/bootstrap:ro
+      - ./db/replication:/workspace/db/replication:ro
       - ./db/seeds:/workspace/db/seeds:ro
       - ./sql:/workspace/sql:ro
       - ./artifacts:/workspace/artifacts
@@ -25,6 +35,128 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  rental_housing_platform_db_physical_fast:
+    profiles:
+      - replication
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    container_name: rental_housing_platform_db_physical_fast
+    restart: unless-stopped
+    entrypoint: ["replica_entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/physical-fast/postgresql.conf
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/18/docker
+      PRIMARY_HOST: rental_housing_platform_db
+      PRIMARY_PORT: 5432
+      PHYSICAL_REPLICATION_USER: physical_replicator
+      PHYSICAL_REPLICATION_SLOT: rental_physical_fast_slot
+      REPLICATION_APPLICATION_NAME: physical_fast
+    depends_on:
+      rental_housing_platform_db:
+        condition: service_healthy
+    volumes:
+      - physical_fast_data:/var/lib/postgresql
+      - physical_fast_ts_reference:/var/lib/postgresql/tablespaces/rental_reference
+      - physical_fast_ts_core:/var/lib/postgresql/tablespaces/rental_core
+      - physical_fast_ts_booking:/var/lib/postgresql/tablespaces/rental_booking
+      - physical_fast_ts_history:/var/lib/postgresql/tablespaces/rental_history
+      - physical_fast_ts_index:/var/lib/postgresql/tablespaces/rental_index
+      - ./docker/postgres/conf/physical-fast:/etc/postgresql/physical-fast:ro
+      - ./sql:/workspace/sql:ro
+      - ./artifacts:/workspace/artifacts
+    ports:
+      - "5489:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rental_housing_platform_db_physical_delayed:
+    profiles:
+      - replication
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    container_name: rental_housing_platform_db_physical_delayed
+    restart: unless-stopped
+    entrypoint: ["replica_entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/physical-delayed/postgresql.conf
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/18/docker
+      PRIMARY_HOST: rental_housing_platform_db
+      PRIMARY_PORT: 5432
+      PHYSICAL_REPLICATION_USER: physical_replicator
+      PHYSICAL_REPLICATION_SLOT: rental_physical_delayed_slot
+      REPLICATION_APPLICATION_NAME: physical_delayed
+    depends_on:
+      rental_housing_platform_db:
+        condition: service_healthy
+    volumes:
+      - physical_delayed_data:/var/lib/postgresql
+      - physical_delayed_ts_reference:/var/lib/postgresql/tablespaces/rental_reference
+      - physical_delayed_ts_core:/var/lib/postgresql/tablespaces/rental_core
+      - physical_delayed_ts_booking:/var/lib/postgresql/tablespaces/rental_booking
+      - physical_delayed_ts_history:/var/lib/postgresql/tablespaces/rental_history
+      - physical_delayed_ts_index:/var/lib/postgresql/tablespaces/rental_index
+      - ./docker/postgres/conf/physical-delayed:/etc/postgresql/physical-delayed:ro
+      - ./sql:/workspace/sql:ro
+      - ./artifacts:/workspace/artifacts
+    ports:
+      - "5490:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rental_housing_platform_db_logical_subscriber:
+    profiles:
+      - replication
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    container_name: rental_housing_platform_db_logical_subscriber
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/logical-subscriber/postgresql.conf
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/18/docker
+      LOGICAL_REPLICATION_USER: logical_replicator
+      PUBLISHER_HOST: rental_housing_platform_db
+      PUBLISHER_PORT: 5432
+    depends_on:
+      rental_housing_platform_db:
+        condition: service_healthy
+    volumes:
+      - logical_subscriber_data:/var/lib/postgresql
+      - ./docker/postgres/conf/logical-subscriber:/etc/postgresql/logical-subscriber:ro
+      - ./db/replication:/workspace/db/replication:ro
+      - ./sql:/workspace/sql:ro
+      - ./artifacts:/workspace/artifacts
+    ports:
+      - "5491:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   migration_runner:
     build:
@@ -55,4 +187,30 @@ volumes:
   ts_history:
     driver: local
   ts_index:
+    driver: local
+  physical_fast_data:
+    driver: local
+  physical_fast_ts_reference:
+    driver: local
+  physical_fast_ts_core:
+    driver: local
+  physical_fast_ts_booking:
+    driver: local
+  physical_fast_ts_history:
+    driver: local
+  physical_fast_ts_index:
+    driver: local
+  physical_delayed_data:
+    driver: local
+  physical_delayed_ts_reference:
+    driver: local
+  physical_delayed_ts_core:
+    driver: local
+  physical_delayed_ts_booking:
+    driver: local
+  physical_delayed_ts_history:
+    driver: local
+  physical_delayed_ts_index:
+    driver: local
+  logical_subscriber_data:
     driver: local

@@ -1,0 +1,24 @@
+﻿SET
+        application_name        |   state   | sync_state |  sent_lsn  | write_lsn  | flush_lsn  | replay_lsn
+--------------------------------+-----------+------------+------------+------------+------------+------------
+ physical_delayed               | streaming | async      | 9/4B009E20 | 9/4B009E20 | 9/4B009E20 | 9/4B006AB0
+ physical_fast                  | streaming | async      | 9/4B009E20 | 9/4B009E20 | 9/4B009E20 | 9/4B009E20
+ rental_currencies_subscription | streaming | async      | 9/4B009E20 | 9/4B009E20 | 9/4B009E20 | 9/4B009E20
+(3 rows)
+
+           slot_name            | slot_type | active | restart_lsn | confirmed_flush_lsn
+--------------------------------+-----------+--------+-------------+---------------------
+ rental_currencies_logical_slot | logical   | t      | 9/4B009DE8  | 9/4B009E20
+ rental_physical_delayed_slot   | physical  | t      | 9/4B009E20  |
+ rental_physical_fast_slot      | physical  | t      | 9/4B009E20  |
+(3 rows)
+
+            pubname            | puballtables | pubinsert | pubupdate | pubdelete | pubtruncate
+-------------------------------+--------------+-----------+-----------+-----------+-------------
+ rental_currencies_publication | f            | t         | t         | t         | t
+(1 row)
+
+            pubname            | schemaname  | tablename
+-------------------------------+-------------+------------
+ rental_currencies_publication | application | currencies
+(1 row)
