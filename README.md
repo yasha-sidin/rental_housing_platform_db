@@ -38,6 +38,7 @@ rental_housing_platform_db/
 ¦  +- 02_domain_model.md
 ¦  +- 03_invariants.md
 ¦  +- 04_business_tasks_catalog.md
+¦  +- 05_indexes.md
 ¦  L- erd/
 +- db/
 ¦  +- bootstrap/
@@ -111,10 +112,10 @@ Bootstrap отделен от обычных миграций, потому чт
 
 - `make dml-run FILE=sql/analytics/select_regex.sql` - запустить один SQL-файл из каталога `sql/` внутри PostgreSQL-контейнера.
 
-Для домашнего задания по DML используются существующие каталоги:
+SQL-сценарии проекта сгруппированы по назначению:
 
-- `sql/analytics/` - SELECT, JOIN и COPY-примеры;
-- `sql/operational/` - INSERT, UPDATE и DELETE-примеры.
+- `sql/analytics/` - аналитические выборки, отчеты, COPY-выгрузки и EXPLAIN;
+- `sql/operational/` - операционные сценарии изменения данных.
 
 ## Где что хранится
 
@@ -130,13 +131,14 @@ Bootstrap отделен от обычных миграций, потому чт
 - `docs/02_domain_model.md` - сущности, атрибуты и связи доменной модели.
 - `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
 - `docs/04_business_tasks_catalog.md` - каталог бизнес-задач.
+- `docs/05_indexes.md` - индексы, сценарии их использования и анализ планов выполнения.
 - `docs/erd/` - ER-диаграмма (исходники и экспорт).
 - `db/migrations/` - DDL up-миграции в исходном формате проекта.
 - `db/rollback/` - DDL down-миграции в исходном формате проекта.
 - `db/seeds/` - заполнение справочников и тестовых данных.
 - `db/tests/` - SQL-проверки ограничений и инвариантов.
-- `sql/operational/` - операционные SQL-запросы, включая DML-файлы для INSERT/UPDATE/DELETE.
-- `sql/analytics/` - аналитические SQL-запросы, включая DML-файлы для SELECT/JOIN/COPY.
+- `sql/operational/` - операционные SQL-запросы для изменения данных.
+- `sql/analytics/` - аналитические SQL-запросы, отчеты, COPY-выгрузки и планы выполнения.
 - `artifacts/explain/` - планы выполнения (`EXPLAIN`) ключевых запросов.
 - `artifacts/snapshots/` - снимки результатов для отчета/защиты.
 
