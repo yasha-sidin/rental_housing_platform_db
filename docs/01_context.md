@@ -19,6 +19,7 @@
 - ограничения целостности и бизнес-инварианты;
 - ролевая модель доступа (RBAC) на уровне данных;
 - SQL-запросы для операционных и аналитических задач;
+- Docker-стенд для физической и логической репликации PostgreSQL;
 - документация по модели данных.
 
 Не входит:
@@ -95,12 +96,17 @@
 - Бизнес-инварианты: `docs/03_invariants.md`.
 - Каталог бизнес-задач: `docs/04_business_tasks_catalog.md`.
 - Индексы и планы выполнения: `docs/05_indexes.md`.
+- Физическая репликация: `docs/06_physical_replication.md`.
+- Логическая репликация: `docs/07_logical_replication.md`.
 - ER-диаграмма: `docs/erd/`.
 - Docker-runner миграций: `docker/migrations/`.
+- Replication-конфиги PostgreSQL: `docker/postgres/conf/`.
 - Миграции (up): `db/migrations/`.
 - Миграции (down): `db/rollback/`.
+- Bootstrap репликации: `db/replication/`.
 - Сиды: `db/seeds/`.
 - SQL-тесты инвариантов: `db/tests/`.
+- Проверки репликации: `sql/replication/`.
 - Операционные запросы: `sql/operational/`.
 - Аналитические запросы: `sql/analytics/`.
-- Технические артефакты (EXPLAIN, снимки): `artifacts/explain/`, `artifacts/snapshots/`.
+- Технические артефакты: `artifacts/explain/`, `artifacts/replication/`, `artifacts/snapshots/`.

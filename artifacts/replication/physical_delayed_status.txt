@@ -1,0 +1,31 @@
+﻿SET
+ is_physical_standby | received_lsn | replayed_lsn | replay_delay
+---------------------+--------------+--------------+--------------
+ t                   | 9/4B009E60   | 9/4B006AB0   |
+(1 row)
+
+           name           |                   setting                    |       source       |                    sourcefile
+--------------------------+----------------------------------------------+--------------------+--------------------------------------------------
+ data_directory           | /var/lib/postgresql/18/docker                | override           |
+ hba_file                 | /etc/postgresql/physical-delayed/pg_hba.conf | override           |
+ hot_standby              | on                                           | configuration file | /etc/postgresql/physical-delayed/postgresql.conf
+ primary_slot_name        | rental_physical_delayed_slot                 | configuration file | /etc/postgresql/physical-delayed/postgresql.conf
+ recovery_min_apply_delay | 300000                                       | configuration file | /etc/postgresql/physical-delayed/postgresql.conf
+(5 rows)
+
+                    sourcefile                    |           name           |                   setting                    | applied | error
+--------------------------------------------------+--------------------------+----------------------------------------------+---------+-------
+ /etc/postgresql/physical-delayed/postgresql.conf | data_directory           | /var/lib/postgresql/18/docker                | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | hba_file                 | /etc/postgresql/physical-delayed/pg_hba.conf | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | hot_standby              | on                                           | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | listen_addresses         | *                                            | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | primary_slot_name        | rental_physical_delayed_slot                 | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | recovery_min_apply_delay | 5min                                         | t       |
+ /etc/postgresql/physical-delayed/postgresql.conf | unix_socket_directories  | /var/run/postgresql                          | t       |
+(7 rows)
+
+ code |             name              |       last_update_date
+------+-------------------------------+-------------------------------
+ XLG  | Logical Replication Currency  | 2026-04-28 14:17:11.957411+00
+ XPH  | Physical Replication Currency | 2026-04-28 14:17:27.764067+00
+(2 rows)

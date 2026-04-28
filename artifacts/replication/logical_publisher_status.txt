@@ -1,0 +1,16 @@
+﻿SET
+            pubname            | puballtables | pubinsert | pubupdate | pubdelete | pubtruncate
+-------------------------------+--------------+-----------+-----------+-----------+-------------
+ rental_currencies_publication | f            | t         | t         | t         | t
+(1 row)
+
+            pubname            | schemaname  | tablename
+-------------------------------+-------------+------------
+ rental_currencies_publication | application | currencies
+(1 row)
+
+ code |             name              |       last_update_date
+------+-------------------------------+-------------------------------
+ XLG  | Logical Replication Currency  | 2026-04-28 14:17:11.957411+00
+ XPH  | Physical Replication Currency | 2026-04-28 14:17:27.764067+00
+(2 rows)

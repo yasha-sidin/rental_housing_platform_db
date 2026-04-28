@@ -1,0 +1,7 @@
+﻿SET
+ id | code |             name              |       last_update_date
+----+------+-------------------------------+-------------------------------
+ 20 | XPH  | Physical Replication Currency | 2026-04-28 14:17:27.764067+00
+(1 row)
+
+INSERT 0 1

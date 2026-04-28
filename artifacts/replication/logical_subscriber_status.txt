@@ -1,0 +1,21 @@
+﻿SET
+            subname             | subenabled |          subslotname           |         subpublications
+--------------------------------+------------+--------------------------------+---------------------------------
+ rental_currencies_subscription | t          | rental_currencies_logical_slot | {rental_currencies_publication}
+(1 row)
+
+            subname             | pid | received_lsn | latest_end_lsn |        latest_end_time
+--------------------------------+-----+--------------+----------------+-------------------------------
+ rental_currencies_subscription |  56 | 9/4B009E60   | 9/4B009E60     | 2026-04-28 14:30:08.088238+00
+(1 row)
+
+ code |             name              |       last_update_date
+------+-------------------------------+-------------------------------
+ XLG  | Logical Replication Currency  | 2026-04-28 14:17:11.957411+00
+ XPH  | Physical Replication Currency | 2026-04-28 14:17:27.764067+00
+(2 rows)
+
+ replicated_currencies
+-----------------------
+                    11
+(1 row)

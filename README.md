@@ -27,7 +27,9 @@ rental_housing_platform_db/
 +- docker/
 ¦  +- postgres/
 ¦  ¦  +- Dockerfile
-¦  ¦  L- ensure_tablespaces.sh
+¦  ¦  +- ensure_tablespaces.sh
+¦  ¦  +- replica_entrypoint.sh
+¦  ¦  L- conf/
 ¦  L- migrations/
 ¦     +- Dockerfile
 ¦     +- prepare_migrations.sh
@@ -39,18 +41,23 @@ rental_housing_platform_db/
 ¦  +- 03_invariants.md
 ¦  +- 04_business_tasks_catalog.md
 ¦  +- 05_indexes.md
+¦  +- 06_physical_replication.md
+¦  +- 07_logical_replication.md
 ¦  L- erd/
 +- db/
 ¦  +- bootstrap/
 ¦  +- migrations/
+¦  +- replication/
 ¦  +- rollback/
 ¦  +- seeds/
 ¦  L- tests/
 +- sql/
+¦  +- replication/
 ¦  +- operational/
 ¦  L- analytics/
 L- artifacts/
    +- explain/
+   +- replication/
    L- snapshots/
 ```
 
@@ -75,6 +82,17 @@ Bootstrap отделен от обычных миграций, потому чт
 - перед запуском утилиты внутри контейнера они конвертируются во временный формат `*.up.sql` / `*.down.sql`;
 - состояние версий хранится в стандартной таблице `schema_migrations`, которую ведет `golang-migrate`;
 - `schema_migrations` остается служебной таблицей migration tool и не переносится в прикладную схему `application`.
+
+## Переменные окружения
+
+Локальный `.env` не хранится в репозитории. Шаблон доступен в `.env.example`.
+
+Для запуска replication-стенда обязательны отдельные пароли:
+
+- `PHYSICAL_REPLICATION_PASSWORD` - пароль роли `physical_replicator`;
+- `LOGICAL_REPLICATION_PASSWORD` - пароль роли `logical_replicator`.
+
+В compose-файлах, entrypoint-скриптах и SQL bootstrap нет запасных значений для этих паролей. Если переменная отсутствует или пуста, replication-запуск останавливается с ошибкой.
 
 ## Команды Makefile
 
@@ -117,13 +135,27 @@ SQL-сценарии проекта сгруппированы по назнач
 - `sql/analytics/` - аналитические выборки, отчеты, COPY-выгрузки и EXPLAIN;
 - `sql/operational/` - операционные сценарии изменения данных.
 
+### Репликация
+
+- `make replication-up` - поднять primary, две physical replicas и logical subscriber.
+- `make replication-down` - остановить и удалить только replication-контейнеры без удаления volumes.
+- `make replication-ps` - показать состояние контейнеров replication-стенда.
+- `make replication-config-check` - проверить, что PostgreSQL применил конфиги из mounted volume.
+- `make replication-physical-status` - проверить physical streaming replication, replication slots и delayed standby.
+- `make replication-logical-status` - проверить publication/subscription для logical replication.
+- `make replication-capture` - сохранить базовые выводы проверок в `artifacts/replication/`.
+- `make replication-capture-logical-demo` - вставить проверочную строку на primary и сохранить проверку logical subscriber.
+- `make replication-capture-physical-delay` - зафиксировать поведение fast и delayed physical replicas, включая 5-минутную задержку.
+
 ## Где что хранится
 
-- `docker-compose.yaml` - локальный запуск PostgreSQL и migration-runner.
+- `docker-compose.yaml` - локальный запуск PostgreSQL, migration-runner и replication-стенда.
 - `Makefile` - единая точка входа для запуска БД и миграций.
-- `docker/postgres/` - кастомный PostgreSQL-образ, который готовит директории tablespaces перед стартом БД.
+- `docker/postgres/` - кастомный PostgreSQL-образ, entrypoint-скрипты и replication-конфиги PostgreSQL.
+- `docker/postgres/conf/` - mounted конфиги primary, physical replicas и logical subscriber.
 - `docker/migrations/` - Dockerfile и скрипты контейнера миграций.
 - `db/bootstrap/` - cluster-level SQL bootstrap для объектов, которые не являются обычными миграциями приложения.
+- `db/replication/` - SQL bootstrap ролей, slots, publication, schema и subscription для replication-стенда.
 - `.env` - параметры окружения для контейнеров.
 - `docs/` - текстовая документация проекта.
 - `docs/00_technical_specification.md` - полная версия технического задания (единый источник требований).
@@ -132,14 +164,18 @@ SQL-сценарии проекта сгруппированы по назнач
 - `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
 - `docs/04_business_tasks_catalog.md` - каталог бизнес-задач.
 - `docs/05_indexes.md` - индексы, сценарии их использования и анализ планов выполнения.
+- `docs/06_physical_replication.md` - физическая репликация, slots, fast/delayed standby и проверки.
+- `docs/07_logical_replication.md` - логическая репликация, publication/subscription и ограничения.
 - `docs/erd/` - ER-диаграмма (исходники и экспорт).
 - `db/migrations/` - DDL up-миграции в исходном формате проекта.
 - `db/rollback/` - DDL down-миграции в исходном формате проекта.
 - `db/seeds/` - заполнение справочников и тестовых данных.
 - `db/tests/` - SQL-проверки ограничений и инвариантов.
+- `sql/replication/` - SQL-проверки конфигурации, статусов и демонстрационных изменений replication-стенда.
 - `sql/operational/` - операционные SQL-запросы для изменения данных.
 - `sql/analytics/` - аналитические SQL-запросы, отчеты, COPY-выгрузки и планы выполнения.
 - `artifacts/explain/` - планы выполнения (`EXPLAIN`) ключевых запросов.
+- `artifacts/replication/` - сохраненные выводы проверок physical и logical replication.
 - `artifacts/snapshots/` - снимки результатов для отчета/защиты.
 
 ## Принцип работы с репозиторием

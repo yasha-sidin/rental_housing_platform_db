@@ -1,0 +1,7 @@
+﻿SET
+ id | code |             name             |       last_update_date
+----+------+------------------------------+-------------------------------
+ 19 | XLG  | Logical Replication Currency | 2026-04-28 14:17:11.957411+00
+(1 row)
+
+INSERT 0 1
