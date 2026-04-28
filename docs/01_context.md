@@ -94,6 +94,7 @@
 - Описание модели и таблиц: `docs/02_domain_model.md`.
 - Бизнес-инварианты: `docs/03_invariants.md`.
 - Каталог бизнес-задач: `docs/04_business_tasks_catalog.md`.
+- Индексы и планы выполнения: `docs/05_indexes.md`.
 - ER-диаграмма: `docs/erd/`.
 - Docker-runner миграций: `docker/migrations/`.
 - Миграции (up): `db/migrations/`.
