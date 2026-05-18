@@ -1,3 +1,15 @@
+FROM golang:1.25-alpine AS cli-builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+
+RUN go build -o /out/rentalctl ./cmd/rentalctl
+
 FROM alpine:3.22
 
 ARG MIGRATE_VERSION=v4.19.0
@@ -19,9 +31,6 @@ RUN set -eux; \
     chmod +x /usr/local/bin/migrate; \
     rm -f /tmp/migrate.tar.gz
 
-COPY docker/migrations/prepare_migrations.sh /app/prepare_migrations.sh
-COPY docker/migrations/run_migrate.sh /app/run_migrate.sh
+COPY --from=cli-builder /out/rentalctl /usr/local/bin/rentalctl
 
-RUN chmod +x /app/prepare_migrations.sh /app/run_migrate.sh
-
-CMD ["migrate", "-version"]
+CMD ["rentalctl", "--help"]
