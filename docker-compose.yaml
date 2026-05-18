@@ -1,162 +1,277 @@
+x-etcd-common: &etcd-common
+  image: quay.io/coreos/etcd:v3.6.11
+  restart: unless-stopped
+  networks:
+    - rental-ha
+
+x-postgres-env: &postgres-env
+  PATRONI_SCOPE: rental-ha
+  PATRONI_NAMESPACE: /service/
+  ETCD3_HOSTS: etcd-1:2379,etcd-2:2379,etcd-3:2379,etcd-4:2379,etcd-5:2379
+  PATRONI_REPLICATION_USERNAME: ${PATRONI_REPLICATION_USERNAME:-replicator}
+  PATRONI_REPLICATION_PASSWORD: ${PATRONI_REPLICATION_PASSWORD:-change_me_replicator}
+  PATRONI_REWIND_USERNAME: ${PATRONI_REWIND_USERNAME:-rewind_user}
+  PATRONI_REWIND_PASSWORD: ${PATRONI_REWIND_PASSWORD:-change_me_rewind}
+  PGDATA: /var/lib/postgresql/data
+  PGBACKREST_STANZA: rental
+  PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+  PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
+  PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
+  PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
+  PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+  PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
+  ENABLE_WAL_ARCHIVE: ${ENABLE_WAL_ARCHIVE:-false}
+
+x-postgres-common: &postgres-common
+  build:
+    context: .
+    dockerfile: docker/postgres-ha/Dockerfile
+    args:
+      PATRONI_VERSION: "4.1.3"
+      PGBACKREST_VERSION: "2.58.0"
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment: *postgres-env
+  depends_on:
+    - etcd-1
+    - etcd-2
+    - etcd-3
+    - etcd-4
+    - etcd-5
+  volumes:
+    - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+    - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    - ./db/seeds:/workspace/db/seeds:ro
+    - ./db/tests:/workspace/db/tests:ro
+  networks:
+    - rental-ha
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health || exit 1"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+
 services:
-  rental_housing_platform_db:
-    build:
-      context: .
-      dockerfile: docker/postgres/Dockerfile
-    container_name: rental_housing_platform_db
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      PGDATA: /var/lib/postgresql/18/docker
-      PHYSICAL_REPLICATION_USER: physical_replicator
-      LOGICAL_REPLICATION_USER: logical_replicator
+  etcd-1:
+    <<: *etcd-common
     command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/primary/postgresql.conf
+      - /usr/local/bin/etcd
+      - --name=etcd-1
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd-1:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd-1:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=rental-ha-etcd
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ts_reference:/var/lib/postgresql/tablespaces/rental_reference
-      - ts_core:/var/lib/postgresql/tablespaces/rental_core
-      - ts_booking:/var/lib/postgresql/tablespaces/rental_booking
-      - ts_history:/var/lib/postgresql/tablespaces/rental_history
-      - ts_index:/var/lib/postgresql/tablespaces/rental_index
-      - ./docker/postgres/conf/primary:/etc/postgresql/primary:ro
-      - ./db/bootstrap:/workspace/db/bootstrap:ro
-      - ./db/replication:/workspace/db/replication:ro
+      - etcd_1_data:/etcd-data
+
+  etcd-2:
+    <<: *etcd-common
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd-2
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd-2:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd-2:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=rental-ha-etcd
+    volumes:
+      - etcd_2_data:/etcd-data
+
+  etcd-3:
+    <<: *etcd-common
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd-3
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd-3:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd-3:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=rental-ha-etcd
+    volumes:
+      - etcd_3_data:/etcd-data
+
+  etcd-4:
+    <<: *etcd-common
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd-4
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd-4:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd-4:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=rental-ha-etcd
+    volumes:
+      - etcd_4_data:/etcd-data
+
+  etcd-5:
+    <<: *etcd-common
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd-5
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd-5:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd-5:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=rental-ha-etcd
+    volumes:
+      - etcd_5_data:/etcd-data
+
+  postgres-node-1:
+    <<: *postgres-common
+    container_name: postgres-node-1
+    environment:
+      <<: *postgres-env
+      PATRONI_NAME: postgres-node-1
+      PATRONI_REST_CONNECT_ADDRESS: postgres-node-1:8008
+      PATRONI_POSTGRES_CONNECT_ADDRESS: postgres-node-1:5432
+    volumes:
+      - postgres_node_1_data:/var/lib/postgresql/data
+      - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       - ./db/seeds:/workspace/db/seeds:ro
-      - ./sql:/workspace/sql:ro
-      - ./artifacts:/workspace/artifacts
-    ports:
-      - "5488:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - ./db/tests:/workspace/db/tests:ro
 
-  rental_housing_platform_db_physical_fast:
-    profiles:
-      - replication
+  postgres-node-2:
+    <<: *postgres-common
+    container_name: postgres-node-2
+    environment:
+      <<: *postgres-env
+      PATRONI_NAME: postgres-node-2
+      PATRONI_REST_CONNECT_ADDRESS: postgres-node-2:8008
+      PATRONI_POSTGRES_CONNECT_ADDRESS: postgres-node-2:5432
+    volumes:
+      - postgres_node_2_data:/var/lib/postgresql/data
+      - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./db/seeds:/workspace/db/seeds:ro
+      - ./db/tests:/workspace/db/tests:ro
+
+  postgres-node-3:
+    <<: *postgres-common
+    container_name: postgres-node-3
+    environment:
+      <<: *postgres-env
+      PATRONI_NAME: postgres-node-3
+      PATRONI_REST_CONNECT_ADDRESS: postgres-node-3:8008
+      PATRONI_POSTGRES_CONNECT_ADDRESS: postgres-node-3:5432
+    volumes:
+      - postgres_node_3_data:/var/lib/postgresql/data
+      - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./db/seeds:/workspace/db/seeds:ro
+      - ./db/tests:/workspace/db/tests:ro
+
+  postgres-node-4:
+    <<: *postgres-common
+    container_name: postgres-node-4
+    environment:
+      <<: *postgres-env
+      PATRONI_NAME: postgres-node-4
+      PATRONI_REST_CONNECT_ADDRESS: postgres-node-4:8008
+      PATRONI_POSTGRES_CONNECT_ADDRESS: postgres-node-4:5432
+    volumes:
+      - postgres_node_4_data:/var/lib/postgresql/data
+      - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./db/seeds:/workspace/db/seeds:ro
+      - ./db/tests:/workspace/db/tests:ro
+
+  postgres-node-5:
+    <<: *postgres-common
+    container_name: postgres-node-5
+    environment:
+      <<: *postgres-env
+      PATRONI_NAME: postgres-node-5
+      PATRONI_REST_CONNECT_ADDRESS: postgres-node-5:8008
+      PATRONI_POSTGRES_CONNECT_ADDRESS: postgres-node-5:5432
+    volumes:
+      - postgres_node_5_data:/var/lib/postgresql/data
+      - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./db/seeds:/workspace/db/seeds:ro
+      - ./db/tests:/workspace/db/tests:ro
+
+  haproxy:
+    image: haproxy:3.3.9-alpine
+    container_name: rental-haproxy
+    restart: unless-stopped
+    depends_on:
+      - postgres-node-1
+      - postgres-node-2
+      - postgres-node-3
+      - postgres-node-4
+      - postgres-node-5
+    volumes:
+      - ./cluster/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "6432:5000"
+      - "6433:5001"
+      - "7000:7000"
+    networks:
+      - rental-ha
+
+  pgbouncer-client-a:
     build:
       context: .
-      dockerfile: docker/postgres/Dockerfile
-    container_name: rental_housing_platform_db_physical_fast
+      dockerfile: docker/pgbouncer/Dockerfile
+      args:
+        PGBOUNCER_VERSION: "1.25.2"
+    container_name: pgbouncer-client-a
     restart: unless-stopped
-    entrypoint: ["replica_entrypoint.sh"]
-    command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/physical-fast/postgresql.conf
     env_file:
       - .env
     environment:
-      PGDATA: /var/lib/postgresql/18/docker
-      PRIMARY_HOST: rental_housing_platform_db
-      PRIMARY_PORT: 5432
-      PHYSICAL_REPLICATION_USER: physical_replicator
-      PHYSICAL_REPLICATION_SLOT: rental_physical_fast_slot
-      REPLICATION_APPLICATION_NAME: physical_fast
+      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}
+      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
+      PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      rental_housing_platform_db:
-        condition: service_healthy
+      - haproxy
     volumes:
-      - physical_fast_data:/var/lib/postgresql
-      - physical_fast_ts_reference:/var/lib/postgresql/tablespaces/rental_reference
-      - physical_fast_ts_core:/var/lib/postgresql/tablespaces/rental_core
-      - physical_fast_ts_booking:/var/lib/postgresql/tablespaces/rental_booking
-      - physical_fast_ts_history:/var/lib/postgresql/tablespaces/rental_history
-      - physical_fast_ts_index:/var/lib/postgresql/tablespaces/rental_index
-      - ./docker/postgres/conf/physical-fast:/etc/postgresql/physical-fast:ro
-      - ./sql:/workspace/sql:ro
-      - ./artifacts:/workspace/artifacts
+      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
-      - "5489:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      - "15432:6432"
+    networks:
+      - rental-ha
 
-  rental_housing_platform_db_physical_delayed:
-    profiles:
-      - replication
+  pgbouncer-client-b:
     build:
       context: .
-      dockerfile: docker/postgres/Dockerfile
-    container_name: rental_housing_platform_db_physical_delayed
+      dockerfile: docker/pgbouncer/Dockerfile
+      args:
+        PGBOUNCER_VERSION: "1.25.2"
+    container_name: pgbouncer-client-b
     restart: unless-stopped
-    entrypoint: ["replica_entrypoint.sh"]
-    command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/physical-delayed/postgresql.conf
     env_file:
       - .env
     environment:
-      PGDATA: /var/lib/postgresql/18/docker
-      PRIMARY_HOST: rental_housing_platform_db
-      PRIMARY_PORT: 5432
-      PHYSICAL_REPLICATION_USER: physical_replicator
-      PHYSICAL_REPLICATION_SLOT: rental_physical_delayed_slot
-      REPLICATION_APPLICATION_NAME: physical_delayed
+      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}
+      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
+      PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      rental_housing_platform_db:
-        condition: service_healthy
+      - haproxy
     volumes:
-      - physical_delayed_data:/var/lib/postgresql
-      - physical_delayed_ts_reference:/var/lib/postgresql/tablespaces/rental_reference
-      - physical_delayed_ts_core:/var/lib/postgresql/tablespaces/rental_core
-      - physical_delayed_ts_booking:/var/lib/postgresql/tablespaces/rental_booking
-      - physical_delayed_ts_history:/var/lib/postgresql/tablespaces/rental_history
-      - physical_delayed_ts_index:/var/lib/postgresql/tablespaces/rental_index
-      - ./docker/postgres/conf/physical-delayed:/etc/postgresql/physical-delayed:ro
-      - ./sql:/workspace/sql:ro
-      - ./artifacts:/workspace/artifacts
+      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
-      - "5490:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  rental_housing_platform_db_logical_subscriber:
-    profiles:
-      - replication
-    build:
-      context: .
-      dockerfile: docker/postgres/Dockerfile
-    container_name: rental_housing_platform_db_logical_subscriber
-    restart: unless-stopped
-    command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/logical-subscriber/postgresql.conf
-    env_file:
-      - .env
-    environment:
-      PGDATA: /var/lib/postgresql/18/docker
-      LOGICAL_REPLICATION_USER: logical_replicator
-      PUBLISHER_HOST: rental_housing_platform_db
-      PUBLISHER_PORT: 5432
-    depends_on:
-      rental_housing_platform_db:
-        condition: service_healthy
-    volumes:
-      - logical_subscriber_data:/var/lib/postgresql
-      - ./docker/postgres/conf/logical-subscriber:/etc/postgresql/logical-subscriber:ro
-      - ./db/replication:/workspace/db/replication:ro
-      - ./sql:/workspace/sql:ro
-      - ./artifacts:/workspace/artifacts
-    ports:
-      - "5491:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      - "15433:6432"
+    networks:
+      - rental-ha
 
   migration_runner:
     build:
@@ -165,52 +280,104 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: rental_housing_platform_db
-      DB_PORT: 5432
+      DB_HOST: haproxy
+      DB_PORT: 5000
       DB_SSLMODE: disable
     depends_on:
-      rental_housing_platform_db:
-        condition: service_healthy
+      - haproxy
     volumes:
       - ./db/migrations:/workspace/db/migrations:ro
       - ./db/rollback:/workspace/db/rollback:ro
+    networks:
+      - rental-ha
+
+  postgres-client:
+    image: postgres:18.4-alpine
+    env_file:
+      - .env
+    profiles:
+      - tools
+    volumes:
+      - ./db/seeds:/workspace/db/seeds:ro
+      - ./db/tests:/workspace/db/tests:ro
+      - ./demo:/workspace/demo
+    networks:
+      - rental-ha
+
+  backup-worker-a:
+    build:
+      context: .
+      dockerfile: docker/postgres-ha/Dockerfile
+      args:
+        PATRONI_VERSION: "4.1.3"
+        PGBACKREST_VERSION: "2.58.0"
+    container_name: backup-worker-a
+    env_file:
+      - .env
+    environment:
+      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+      PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
+      PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
+      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+      PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
+    command: ["sleep", "infinity"]
+    volumes:
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./demo/06-backup/artifacts:/workspace/demo/06-backup/artifacts
+      - ./demo/07-pitr/artifacts:/workspace/demo/07-pitr/artifacts
+    networks:
+      - rental-ha
+
+  backup-worker-b:
+    build:
+      context: .
+      dockerfile: docker/postgres-ha/Dockerfile
+      args:
+        PATRONI_VERSION: "4.1.3"
+        PGBACKREST_VERSION: "2.58.0"
+    container_name: backup-worker-b
+    env_file:
+      - .env
+    environment:
+      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+      PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
+      PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
+      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+      PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
+    command: ["sleep", "infinity"]
+    volumes:
+      - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./demo/06-backup/artifacts:/workspace/demo/06-backup/artifacts
+      - ./demo/07-pitr/artifacts:/workspace/demo/07-pitr/artifacts
+    networks:
+      - rental-ha
+
+  pmm-server:
+    image: percona/pmm-server:3.6.0
+    container_name: pmm-server
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - pmm_data:/srv
+    networks:
+      - rental-ha
 
 volumes:
-  postgres_data:
-    driver: local
-  ts_reference:
-    driver: local
-  ts_core:
-    driver: local
-  ts_booking:
-    driver: local
-  ts_history:
-    driver: local
-  ts_index:
-    driver: local
-  physical_fast_data:
-    driver: local
-  physical_fast_ts_reference:
-    driver: local
-  physical_fast_ts_core:
-    driver: local
-  physical_fast_ts_booking:
-    driver: local
-  physical_fast_ts_history:
-    driver: local
-  physical_fast_ts_index:
-    driver: local
-  physical_delayed_data:
-    driver: local
-  physical_delayed_ts_reference:
-    driver: local
-  physical_delayed_ts_core:
-    driver: local
-  physical_delayed_ts_booking:
-    driver: local
-  physical_delayed_ts_history:
-    driver: local
-  physical_delayed_ts_index:
-    driver: local
-  logical_subscriber_data:
-    driver: local
+  etcd_1_data:
+  etcd_2_data:
+  etcd_3_data:
+  etcd_4_data:
+  etcd_5_data:
+  postgres_node_1_data:
+  postgres_node_2_data:
+  postgres_node_3_data:
+  postgres_node_4_data:
+  postgres_node_5_data:
+  pmm_data:
+
+networks:
+  rental-ha:
+    driver: bridge

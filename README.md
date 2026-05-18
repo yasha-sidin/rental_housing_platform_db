@@ -1,188 +1,223 @@
-# Rental Housing Platform DB
+# Построение отказоустойчивого PostgreSQL-кластера для платформы краткосрочной аренды жилья
 
-## О проекте
+Проект выполняется в рамках курса OTUS **"Базы данных"**. Цель проекта - показать не только доменную схему базы данных, но и инженерный контур высокой доступности для PostgreSQL: автоматический failover, синхронную репликацию с `RPO = 0`, резервное копирование, WAL archive и point-in-time recovery.
 
-Учебный проект по проектированию реляционной базы данных для платформы краткосрочной аренды жилья.
+## Что строится
 
-Цель: спроектировать устойчивую к аномалиям модель данных, которая покрывает ключевые доменные области:
+Предметная область - платформа краткосрочной аренды жилья:
 
-- пользователи;
-- объекты недвижимости;
+- пользователи, роли и права;
+- объявления и фотографии жилья;
+- адреса, города, страны и валюты;
 - календарь доступности;
-- ценообразование и история цен;
-- бронирования;
-- платежи;
-- отзывы и рейтинги.
+- цены и история изменения цен;
+- бронирования, платежи и отзывы.
 
-Проект сфокусирован на уровне БД: схема, ограничения целостности, миграции, тестовые данные и SQL-запросы для операционных и аналитических задач.
+Инфраструктурная часть проекта:
 
-## Структура проекта
+- 5 PostgreSQL/Patroni-узлов;
+- 5 etcd-узлов для quorum и leader lock Patroni;
+- режим `1 primary + минимум 2 synchronous replicas`;
+- client-local PgBouncer + HAProxy для двух демонстрационных клиентов;
+- отдельный migration runner, который применяет миграции через writer endpoint;
+- два backup worker без единой точки отказа процесса backup;
+- pgBackRest, full backup, WAL archive и PITR;
+- S3-compatible repository как внешний надежный backup backend;
+- PMM как визуальный контур наблюдаемости.
+
+Контур высокой доступности - часть архитектуры, отвечающая за непрерывную работу базы данных при отказе отдельных узлов.
+
+## Архитектура
+
+Логическая топология стенда:
 
 ```text
-rental_housing_platform_db/
-+- docker-compose.yaml
-+- Makefile
-+- .env
-+- README.md
-+- docker/
-¦  +- postgres/
-¦  ¦  +- Dockerfile
-¦  ¦  +- ensure_tablespaces.sh
-¦  ¦  +- replica_entrypoint.sh
-¦  ¦  L- conf/
-¦  L- migrations/
-¦     +- Dockerfile
-¦     +- prepare_migrations.sh
-¦     L- run_migrate.sh
-+- docs/
-¦  +- 00_technical_specification.md
-¦  +- 01_context.md
-¦  +- 02_domain_model.md
-¦  +- 03_invariants.md
-¦  +- 04_business_tasks_catalog.md
-¦  +- 05_indexes.md
-¦  +- 06_physical_replication.md
-¦  +- 07_logical_replication.md
-¦  L- erd/
-+- db/
-¦  +- bootstrap/
-¦  +- migrations/
-¦  +- replication/
-¦  +- rollback/
-¦  +- seeds/
-¦  L- tests/
-+- sql/
-¦  +- replication/
-¦  +- operational/
-¦  L- analytics/
-L- artifacts/
-   +- explain/
-   +- replication/
-   L- snapshots/
+client-a -> PgBouncer -> HAProxy writer/read -> PostgreSQL/Patroni cluster
+client-b -> PgBouncer -> HAProxy writer/read -> PostgreSQL/Patroni cluster
+
+PostgreSQL/Patroni:
+  postgres-node-1
+  postgres-node-2
+  postgres-node-3
+  postgres-node-4
+  postgres-node-5
+
+etcd quorum:
+  etcd-1
+  etcd-2
+  etcd-3
+  etcd-4
+  etcd-5
+
+backup:
+  backup-worker-a
+  backup-worker-b
+  S3-compatible repository
+
+observability:
+  PMM Server
 ```
 
-## Система миграций (Docker-only)
+Для 5 узлов etcd quorum равен 3. Это позволяет пережить отказ двух etcd-узлов. Для PostgreSQL включается строгий режим синхронной репликации: запись подтверждается клиенту только после попадания WAL на primary и минимум две synchronous replicas.
 
-Миграции выполняются только через отдельный контейнер `migration_runner` и `golang-migrate`.
+## RPO, RTO и PITR
 
-Перед применением миграций выполняется cluster-level bootstrap табличных пространств:
+`RPO = 0` в проекте означает: подтвержденные клиенту транзакции не теряются при отказе primary, если в момент записи доступны две synchronous replicas.
 
-- кастомный PostgreSQL-контейнер из `docker/postgres/` при старте проверяет и создает директории для tablespaces;
-- каждый tablespace смонтирован отдельным Docker named volume, что моделирует раздельные физические диски;
-- `db/bootstrap/001__create_tablespaces.sql` идемпотентно создает tablespaces, если их еще нет;
-- `V011__assign_application_tablespaces.sql` распределяет таблицы и индексы схемы `application` по tablespaces.
+Если синхронных реплик становится меньше двух, запись должна остановиться. Это ожидаемый защитный режим: кластер временно теряет возможность принимать записи, но не нарушает обещание `RPO = 0`.
 
-Bootstrap отделен от обычных миграций, потому что `CREATE TABLESPACE` работает на уровне PostgreSQL-кластера, требует существующий путь на сервере БД и не выполняется внутри transaction block.
+`RTO` - время восстановления. В проекте отдельно измеряются:
 
-Важно:
+- RTO automatic failover;
+- RTO восстановления из full backup;
+- RTO PITR на recovery-node.
 
-- исходные файлы в репозитории не переименовываются:
-  - up-миграции: `db/migrations/V...sql`;
-  - down-миграции: `db/rollback/U...sql`;
-- перед запуском утилиты внутри контейнера они конвертируются во временный формат `*.up.sql` / `*.down.sql`;
-- состояние версий хранится в стандартной таблице `schema_migrations`, которую ведет `golang-migrate`;
-- `schema_migrations` остается служебной таблицей migration tool и не переносится в прикладную схему `application`.
+PITR защищает от логических ошибок: ошибочный `DELETE`, `UPDATE`, `DROP` или плохая миграция будут реплицированы на все узлы, поэтому для восстановления нужен full backup + WAL archive + восстановление на момент времени до ошибки.
 
-## Переменные окружения
+## Миграции
 
-Локальный `.env` не хранится в репозитории. Шаблон доступен в `.env.example`.
+Миграции переписаны как компактная цепочка без tablespaces:
 
-Для запуска replication-стенда обязательны отдельные пароли:
+```text
+db/migrations/V001__database_baseline.sql
+db/migrations/V002__reference_catalogs.sql
+db/migrations/V003__users_listings_photos.sql
+db/migrations/V004__pricing_availability.sql
+db/migrations/V005__bookings_payments_reviews.sql
+db/migrations/V006__indexes_comments_grants.sql
+```
 
-- `PHYSICAL_REPLICATION_PASSWORD` - пароль роли `physical_replicator`;
-- `LOGICAL_REPLICATION_PASSWORD` - пароль роли `logical_replicator`.
+Обратные миграции лежат в `db/rollback/`.
 
-В compose-файлах, entrypoint-скриптах и SQL bootstrap нет запасных значений для этих паролей. Если переменная отсутствует или пуста, replication-запуск останавливается с ошибкой.
+Миграции применяются вручную после поднятия кластера и proxy-контура:
 
-## Команды Makefile
+```text
+migration_runner -> HAProxy writer endpoint -> current primary
+```
 
-### Базовые
+Мигратор по умолчанию обходит PgBouncer. Если PgBouncer используется для миграций, для него должен быть отдельный endpoint в `session pooling` mode.
 
-- `make up` - поднять PostgreSQL контейнер.
-- `make down` - остановить контейнеры.
-- `make restart` - перезапуск PostgreSQL.
-- `make logs` - логи PostgreSQL.
-- `make ps` - список сервисов.
-- `make db-wait` - дождаться готовности PostgreSQL к подключениям.
-- `make bootstrap-tablespaces` - создать PostgreSQL tablespaces, если они еще не созданы.
+## Клиентское чтение
 
-### Миграции
+Проект демонстрирует два режима чтения на стороне клиента:
 
-- `make migrate-check` - проверить парность `V/U` без применения миграций.
-- `make migrate-up` - поднять PostgreSQL, выполнить bootstrap tablespaces и применить все pending миграции.
-- `make migrate-down-one` - откатить одну миграцию.
-- `make migrate-down STEPS=N` - откатить `N` миграций.
-- `make migrate-version` - показать текущую версию миграций.
-- `make migrate-goto VERSION=N` - перейти к целевой версии.
-- `make migrate-force VERSION=N` - принудительно установить версию (аварийная операция).
-### Сиды (тестовые данные)
+```text
+normal session
+  write -> writer endpoint -> current primary
+  read  -> reader endpoint -> replica pool
 
-- `make seed-run` - загрузить базовые сиды (`001..003`).
-- `make seed-load N=1000` - загрузить массовые данные (по умолчанию `N=1000`, максимум `N=100000`).
-- `make seed-clean` - очистить все данные, добавленные seed-скриптами (миграционные таблицы не затрагиваются).
-- `make seed-reset` - пересоздать БД, применить миграции и загрузить базовые сиды.
+strong session
+  write -> writer endpoint -> current primary
+  read  -> writer endpoint -> current primary
+```
 
-`seed-load` расширяет нагрузку сразу на несколько таблиц:
-`users`, `user_roles`, `addresses`, `listings`, `photos`, `listing_photos`, `base_prices`,
-`listing_availability_days`, `price_history`.
+`normal` подходит для сценариев, где допустима eventual consistency. `strong` используется там, где нужна гарантия read-after-write.
 
-### SQL-запросы
+## Backup
 
-- `make dml-run FILE=sql/analytics/select_regex.sql` - запустить один SQL-файл из каталога `sql/` внутри PostgreSQL-контейнера.
+Для демонстрации используется только full backup. WAL archive включен отдельно, потому что именно он нужен для PITR.
+В базовом `.env.example` `ENABLE_WAL_ARCHIVE=false`, чтобы HA-стенд запускался без реального S3. Для backup/PITR-сценариев нужно указать рабочий S3-compatible endpoint, выполнить `stanza-create` и включить `ENABLE_WAL_ARCHIVE=true`.
 
-SQL-сценарии проекта сгруппированы по назначению:
+Надежность backup-процесса достигается не запуском backup на каждой реплике, а отдельным backup-контуром:
 
-- `sql/analytics/` - аналитические выборки, отчеты, COPY-выгрузки и EXPLAIN;
-- `sql/operational/` - операционные сценарии изменения данных.
+```text
+backup-worker-a
+backup-worker-b
+  -> lock
+  -> выбор подходящей standby-реплики
+  -> pgBackRest full backup
+  -> repository check
+  -> restore drill
+```
 
-### Репликация
+S3-compatible repository считается внешним высокодоступным хранилищем. Docker-стенд не имитирует production-grade S3 несколькими MinIO-контейнерами.
 
-- `make replication-up` - поднять primary, две physical replicas и logical subscriber.
-- `make replication-down` - остановить и удалить только replication-контейнеры без удаления volumes.
-- `make replication-ps` - показать состояние контейнеров replication-стенда.
-- `make replication-config-check` - проверить, что PostgreSQL применил конфиги из mounted volume.
-- `make replication-physical-status` - проверить physical streaming replication, replication slots и delayed standby.
-- `make replication-logical-status` - проверить publication/subscription для logical replication.
-- `make replication-capture` - сохранить базовые выводы проверок в `artifacts/replication/`.
-- `make replication-capture-logical-demo` - вставить проверочную строку на primary и сохранить проверку logical subscriber.
-- `make replication-capture-physical-delay` - зафиксировать поведение fast и delayed physical replicas, включая 5-минутную задержку.
+## Команды
 
-## Где что хранится
+Публичный интерфейс Makefile намеренно короткий:
 
-- `docker-compose.yaml` - локальный запуск PostgreSQL, migration-runner и replication-стенда.
-- `Makefile` - единая точка входа для запуска БД и миграций.
-- `docker/postgres/` - кастомный PostgreSQL-образ, entrypoint-скрипты и replication-конфиги PostgreSQL.
-- `docker/postgres/conf/` - mounted конфиги primary, physical replicas и logical subscriber.
-- `docker/migrations/` - Dockerfile и скрипты контейнера миграций.
-- `db/bootstrap/` - cluster-level SQL bootstrap для объектов, которые не являются обычными миграциями приложения.
-- `db/replication/` - SQL bootstrap ролей, slots, publication, schema и subscription для replication-стенда.
-- `.env` - параметры окружения для контейнеров.
-- `docs/` - текстовая документация проекта.
-- `docs/00_technical_specification.md` - полная версия технического задания (единый источник требований).
-- `docs/01_context.md` - краткий рабочий контекст проекта и навигация по артефактам.
-- `docs/02_domain_model.md` - сущности, атрибуты и связи доменной модели.
-- `docs/03_invariants.md` - бизнес-инварианты, обеспечиваемые на уровне БД.
-- `docs/04_business_tasks_catalog.md` - каталог бизнес-задач.
-- `docs/05_indexes.md` - индексы, сценарии их использования и анализ планов выполнения.
-- `docs/06_physical_replication.md` - физическая репликация, slots, fast/delayed standby и проверки.
-- `docs/07_logical_replication.md` - логическая репликация, publication/subscription и ограничения.
-- `docs/erd/` - ER-диаграмма (исходники и экспорт).
-- `db/migrations/` - DDL up-миграции в исходном формате проекта.
-- `db/rollback/` - DDL down-миграции в исходном формате проекта.
-- `db/seeds/` - заполнение справочников и тестовых данных.
-- `db/tests/` - SQL-проверки ограничений и инвариантов.
-- `sql/replication/` - SQL-проверки конфигурации, статусов и демонстрационных изменений replication-стенда.
-- `sql/operational/` - операционные SQL-запросы для изменения данных.
-- `sql/analytics/` - аналитические SQL-запросы, отчеты, COPY-выгрузки и планы выполнения.
-- `artifacts/explain/` - планы выполнения (`EXPLAIN`) ключевых запросов.
-- `artifacts/replication/` - сохраненные выводы проверок physical и logical replication.
-- `artifacts/snapshots/` - снимки результатов для отчета/защиты.
+```text
+make up
+make clear
+make verify
+make demo SCENARIO=<name>
+make down
+```
 
-## Принцип работы с репозиторием
+Makefile является тонкой оберткой над единым Cobra CLI и запускает готовый бинарник из `bin/`. Для обычного запуска проекта Go на машине не нужен.
 
-- Все изменения схемы вносятся только через `db/migrations/` и `db/rollback/`.
-- Миграции запускаются только через `Makefile`.
-- Тестовые данные добавляются через `db/seeds/`.
-- Проверки бизнес-правил фиксируются в `db/tests/`.
-- Основные требования ведутся в `docs/00_technical_specification.md`.
-- Документация синхронизируется с фактической схемой БД.
+Исполняемые файлы:
+
+```text
+bin/rentalctl.exe
+bin/rentalctl-linux-amd64
+bin/rentalctl-darwin-amd64
+bin/rentalctl-darwin-arm64
+```
+
+Исходники CLI остаются в `cmd/rentalctl/` и `internal/`, но они нужны только для разработки самого инструмента.
+
+Назначение:
+
+- `make up` - поднять демонстрационный стенд;
+- `make clear` - очистить прикладные и демонстрационные данные без удаления контейнеров и volumes;
+- `make verify` - проверить базовую готовность ключевых подсистем;
+- `make demo SCENARIO=<name>` - запустить выбранный демонстрационный сценарий;
+- `make down` - полностью удалить стенд, volumes и временное состояние.
+
+Сценарии:
+
+```text
+SCENARIO=domain
+SCENARIO=migration
+SCENARIO=failover
+SCENARIO=proxy
+SCENARIO=rpo-zero
+SCENARIO=backup
+SCENARIO=pitr
+SCENARIO=observability
+```
+
+## Требования к стенду
+
+Минимально:
+
+```text
+CPU: 6 cores
+RAM: 24 GB
+Disk: 50 GB free
+OS:
+  - Windows 10/11 + Docker Desktop + WSL2
+  - Linux x86_64 + Docker Engine + Docker Compose v2
+  - macOS 13+ + Docker Desktop
+Docker: required
+```
+
+Рекомендуемо:
+
+```text
+CPU: 6-8 cores
+RAM: 32 GB
+Disk: 80+ GB free
+Docker: required
+```
+
+Для Windows предпочтителен backend WSL2. Для macOS нужно заранее выделить Docker Desktop достаточный лимит CPU/RAM. Для Linux достаточно Docker Engine и Compose plugin.
+
+## Документация
+
+- `docs/00_project_brief.md` - цель и границы проекта.
+- `docs/01_domain_model.md` - доменная модель.
+- `docs/02_schema_design.md` - схема БД, миграции и инварианты.
+- `docs/03_cluster_topology.md` - Patroni, etcd, PgBouncer, HAProxy, PMM.
+- `docs/04_rpo_rto.md` - RPO/RTO и границы гарантий.
+- `docs/05_backup_pitr.md` - backup workers, pgBackRest, WAL archive, PITR.
+- `docs/06_runbooks.md` - действия при отказах.
+- `docs/07_demo_plan.md` - сценарии защиты.
+- `docs/08_production_requirements.md` - требования к production-системе.
+- `docs/09_sources.md` - источники и документация инструментов.
+- `docs/adr/` - архитектурные решения.
+
+## Визуальные материалы
+
+Новые схемы топологий должны храниться в `docs/diagrams/png/`. Старые screenshots и подтверждения из предыдущей версии проекта не используются: новые подтверждения создаются после реализации demo-сценариев и сохраняются рядом со сценариями в `demo/*/artifacts/`.
