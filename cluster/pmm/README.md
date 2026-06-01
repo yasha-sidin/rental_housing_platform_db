@@ -5,10 +5,10 @@ PMM используется как контур наблюдаемости, а 
 В демонстрации PMM должен показать:
 
 - состояние PostgreSQL-узлов;
-- нагрузку CPU/RAM/disk/network;
+- нагрузку CPU, RAM, disk и network;
 - connections, transactions, locks, checkpoints;
 - WAL и replication metrics;
-- HAProxy endpoints;
+- endpoints двух HAProxy;
 - динамику во время failover и backup/PITR-сценариев.
 
 Подключение PMM clients/exporters выполняется после стабилизации HA-кластера, чтобы не смешивать демонстрацию отказоустойчивости и настройку наблюдаемости.

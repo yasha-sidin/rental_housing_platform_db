@@ -52,6 +52,20 @@ x-postgres-common: &postgres-common
     timeout: 3s
     retries: 30
 
+x-haproxy-common: &haproxy-common
+  image: haproxy:3.3.9-alpine
+  restart: unless-stopped
+  depends_on:
+    - postgres-node-1
+    - postgres-node-2
+    - postgres-node-3
+    - postgres-node-4
+    - postgres-node-5
+  volumes:
+    - ./cluster/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+  networks:
+    - rental-ha
+
 services:
   etcd-1:
     <<: *etcd-common
@@ -208,24 +222,21 @@ services:
       - ./db/seeds:/workspace/db/seeds:ro
       - ./db/tests:/workspace/db/tests:ro
 
-  haproxy:
-    image: haproxy:3.3.9-alpine
-    container_name: rental-haproxy
-    restart: unless-stopped
-    depends_on:
-      - postgres-node-1
-      - postgres-node-2
-      - postgres-node-3
-      - postgres-node-4
-      - postgres-node-5
-    volumes:
-      - ./cluster/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+  haproxy-client-a:
+    <<: *haproxy-common
+    container_name: haproxy-client-a
     ports:
       - "6432:5000"
       - "6433:5001"
       - "7000:7000"
-    networks:
-      - rental-ha
+
+  haproxy-client-b:
+    <<: *haproxy-common
+    container_name: haproxy-client-b
+    ports:
+      - "6434:5000"
+      - "6435:5001"
+      - "7002:7000"
 
   pgbouncer-client-a:
     build:
@@ -242,9 +253,9 @@ services:
       PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
       PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      - haproxy
+      - haproxy-client-a
     volumes:
-      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./cluster/pgbouncer/pgbouncer-client-a.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
       - "15432:6432"
     networks:
@@ -265,9 +276,9 @@ services:
       PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
       PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      - haproxy
+      - haproxy-client-b
     volumes:
-      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./cluster/pgbouncer/pgbouncer-client-b.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
       - "15433:6432"
     networks:
@@ -280,11 +291,11 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: haproxy
+      DB_HOST: haproxy-client-a
       DB_PORT: 5000
       DB_SSLMODE: disable
     depends_on:
-      - haproxy
+      - haproxy-client-a
     volumes:
       - ./db/migrations:/workspace/db/migrations:ro
       - ./db/rollback:/workspace/db/rollback:ro

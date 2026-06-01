@@ -39,7 +39,7 @@ WHERE NOT EXISTS (
 INSERT INTO listings (owner_id, object_type_id, address_id, capacity, number_of_rooms, description, status)
 SELECT u.id, ot.id, a.id, v.capacity, v.rooms, v.description, v.status::listing_publication_status
 FROM (VALUES ('owner_alice', 'apartment', '5th Avenue, 1', 2, 1, 'Manhattan apartment near park', 'active'),
-             ('owner_alice', 'loft', 'Rue de Rivoli, 101', 4, 2, 'Paris loft for family trip', 'active'),
+             ('owner_alice', 'loft', 'Rue de Rivoli, 101', 4, 2, 'Paris loft for family stay', 'active'),
              ('owner_boris', 'house', 'Unter den Linden, 10', 6, 4, 'Berlin house with workspace', 'active'),
              ('owner_boris', 'studio', 'Soho Square, 8', 2, 1, 'London studio hidden draft', 'hidden')) AS v(owner_username, object_type_name, street_line1, capacity, rooms, description, status)
          JOIN users u ON u.username = v.owner_username
@@ -63,7 +63,7 @@ INSERT INTO listing_photos (listing_id, photo_id, slot)
 SELECT l.id, p.id, v.slot
 FROM (VALUES ('Manhattan apartment near park', 'https://images.example/manhattan-1.jpg', 1),
              ('Manhattan apartment near park', 'https://images.example/manhattan-2.jpg', 2),
-             ('Paris loft for family trip', 'https://images.example/paris-1.jpg', 1),
+             ('Paris loft for family stay', 'https://images.example/paris-1.jpg', 1),
              ('Berlin house with workspace', 'https://images.example/berlin-1.jpg', 1)) AS v(listing_description, photo_link, slot)
          JOIN listings l ON l.description = v.listing_description
          JOIN photos p ON p.link = v.photo_link
@@ -72,7 +72,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO base_prices (currency_id, amount_in_minor, listing_id)
 SELECT c.id, v.amount_in_minor, l.id
 FROM (VALUES ('USD', 18000, 'Manhattan apartment near park'),
-             ('EUR', 19000, 'Paris loft for family trip'),
+             ('EUR', 19000, 'Paris loft for family stay'),
              ('EUR', 21000, 'Berlin house with workspace'),
              ('GBP', 14000, 'London studio hidden draft')) AS v(currency_code, amount_in_minor, listing_description)
          JOIN currencies c ON c.code = v.currency_code

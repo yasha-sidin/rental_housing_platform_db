@@ -53,8 +53,8 @@ func newClusterCommand() *cobra.Command {
 func clusterUp(ctx context.Context) error {
 	startedAt := time.Now()
 	logInfo("cluster up started")
-	logInfo("running docker compose up -d --build")
-	if err := runner.DockerCompose(ctx, "up", "-d", "--build"); err != nil {
+	logInfo("running docker compose up -d --build --remove-orphans")
+	if err := runner.DockerCompose(ctx, "up", "-d", "--build", "--remove-orphans"); err != nil {
 		return err
 	}
 
@@ -77,7 +77,7 @@ func waitForSyncStandbys(ctx context.Context) error {
 	attempt := 1
 
 	for time.Now().Before(deadline) {
-		out, err := runner.DockerComposeCapture(ctx, "run", "--rm", "--no-deps", "postgres-client", "sh", "-ec", `PGPASSWORD="$POSTGRES_PASSWORD" psql -h haproxy -p 5000 -U "$POSTGRES_USER" -d postgres -tAc "select count(*) from pg_stat_replication where sync_state = 'sync';"`)
+		out, err := runner.DockerComposeCapture(ctx, "run", "--rm", "--no-deps", "postgres-client", "sh", "-ec", `PGPASSWORD="$POSTGRES_PASSWORD" psql -h haproxy-client-a -p 5000 -U "$POSTGRES_USER" -d postgres -tAc "select count(*) from pg_stat_replication where sync_state = 'sync';"`)
 		if err == nil {
 			if count, ok := lastIntegerLine(out); ok {
 				logInfo("sync standbys: %d/2", count)
@@ -100,8 +100,8 @@ func waitForSyncStandbys(ctx context.Context) error {
 
 func ensureDatabase(ctx context.Context) error {
 	command := `if [ "$POSTGRES_DB" = "postgres" ]; then exit 0; fi
-if PGPASSWORD="$POSTGRES_PASSWORD" psql -h haproxy -p 5000 -U "$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$POSTGRES_DB'" | grep -q 1; then exit 0; fi
-PGPASSWORD="$POSTGRES_PASSWORD" createdb -h haproxy -p 5000 -U "$POSTGRES_USER" "$POSTGRES_DB"`
+if PGPASSWORD="$POSTGRES_PASSWORD" psql -h haproxy-client-a -p 5000 -U "$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$POSTGRES_DB'" | grep -q 1; then exit 0; fi
+PGPASSWORD="$POSTGRES_PASSWORD" createdb -h haproxy-client-a -p 5000 -U "$POSTGRES_USER" "$POSTGRES_DB"`
 
 	return runner.DockerCompose(ctx, "run", "--rm", "--no-deps", "postgres-client", "sh", "-ec", command)
 }

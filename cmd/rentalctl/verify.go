@@ -13,7 +13,7 @@ import (
 func newVerifyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "verify",
-		Short: "Show container status and verify writer endpoint",
+		Short: "Show container status and verify the write route",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Minute)
 			defer cancel()

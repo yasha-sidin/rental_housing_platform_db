@@ -31,17 +31,17 @@ func demo(ctx context.Context, scenario string) error {
 	case "migration":
 		return runMigrationDemo(ctx)
 	case "failover":
-		return writeScenarioNote("03-failover", "РћСЃС‚Р°РЅРѕРІРёС‚СЊ С‚РµРєСѓС‰РёР№ primary, РґРѕР¶РґР°С‚СЊСЃСЏ РЅРѕРІРѕРіРѕ primary С‡РµСЂРµР· HAProxy writer endpoint, СЃРѕС…СЂР°РЅРёС‚СЊ РІС‹РІРѕРґ Patroni/HAProxy Рё СѓСЃРїРµС€РЅСѓСЋ Р·Р°РїРёСЃСЊ РїРѕСЃР»Рµ failover.\n")
+		return writeScenarioNote("03-failover", "Остановить текущий primary, дождаться нового primary через маршрут записи HAProxy, сохранить вывод Patroni/HAProxy и успешную запись после failover.\n")
 	case "proxy":
-		return writeScenarioNote("04-proxy-failure", "РћСЃС‚Р°РЅРѕРІРёС‚СЊ pgbouncer-client-a, РїРѕРєР°Р·Р°С‚СЊ, С‡С‚Рѕ pgbouncer-client-b РїСЂРѕРґРѕР»Р¶Р°РµС‚ СЂР°Р±РѕС‚Р°С‚СЊ. РЎРѕС…СЂР°РЅРёС‚СЊ docker compose ps Рё СѓСЃРїРµС€РЅС‹Р№ SQL-Р·Р°РїСЂРѕСЃ РєР»РёРµРЅС‚Р° B.\n")
+		return writeScenarioNote("04-proxy-failure", "Остановить pgbouncer-client-a или haproxy-client-a, показать, что клиент B продолжает работать через свою цепочку PgBouncer + HAProxy. Сохранить docker compose ps и успешный SQL-запрос клиента B.\n")
 	case "rpo-zero":
-		return writeScenarioNote("05-sync-rpo-zero", "Р—Р°РїРёСЃР°С‚СЊ РїРѕРґС‚РІРµСЂР¶РґРµРЅРЅСѓСЋ С‚СЂР°РЅР·Р°РєС†РёСЋ, РѕСЃС‚Р°РЅРѕРІРёС‚СЊ primary, РїРѕСЃР»Рµ failover РїСЂРѕС‡РёС‚Р°С‚СЊ Р·Р°РїРёСЃСЊ РЅР° РЅРѕРІРѕРј primary. РћС‚РґРµР»СЊРЅРѕ РїРѕРєР°Р·Р°С‚СЊ РѕСЃС‚Р°РЅРѕРІРєСѓ Р·Р°РїРёСЃРё РїСЂРё РЅРµС…РІР°С‚РєРµ РґРІСѓС… synchronous replicas.\n")
+		return writeScenarioNote("05-sync-rpo-zero", "Записать подтвержденную транзакцию, остановить primary, после failover прочитать запись на новом primary. Отдельно показать остановку записи при нехватке двух synchronous replicas.\n")
 	case "backup":
 		return fullBackup(ctx)
 	case "pitr":
-		return writeScenarioNote("07-pitr", "РЎРѕР·РґР°С‚СЊ restore point, РІС‹РїРѕР»РЅРёС‚СЊ Р»РѕРіРёС‡РµСЃРєСѓСЋ РѕС€РёР±РєСѓ, РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ recovery-node РёР· full backup Рё WAL archive РґРѕ РјРѕРјРµРЅС‚Р° РїРµСЂРµРґ РѕС€РёР±РєРѕР№, СЃРѕС…СЂР°РЅРёС‚СЊ РїСЂРѕРІРµСЂРѕС‡РЅС‹Рµ SELECT.\n")
+		return writeScenarioNote("07-pitr", "Создать restore point, выполнить логическую ошибку, восстановить recovery-node из full backup и WAL archive до момента перед ошибкой, сохранить проверочные SELECT.\n")
 	case "observability":
-		return writeScenarioNote("08-observability", "РћС‚РєСЂС‹С‚СЊ PMM РЅР° http://localhost:8080, СЃРѕС…СЂР°РЅРёС‚СЊ dashboard СЃРѕСЃС‚РѕСЏРЅРёСЏ PostgreSQL/HAProxy РґРѕ Рё РїРѕСЃР»Рµ failover.\n")
+		return writeScenarioNote("08-observability", "Открыть PMM на http://localhost:8080, сохранить dashboard состояния PostgreSQL и HAProxy до и после failover.\n")
 	default:
 		return fmt.Errorf("unknown scenario: %s", scenario)
 	}

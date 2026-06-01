@@ -6,7 +6,7 @@
 2. Определить current primary через Patroni REST API или SQL `pg_is_in_recovery()`.
 3. Остановить контейнер primary.
 4. Дождаться promotion новой реплики.
-5. Проверить HAProxy writer endpoint.
+5. Проверить маршрут записи одного из HAProxy.
 6. Выполнить тестовую запись.
 7. Сохранить вывод в `demo/03-failover/artifacts/`.
 
@@ -20,9 +20,9 @@
 
 ## Отказ client-local proxy
 
-1. Остановить `pgbouncer-client-a`.
-2. Показать, что клиент A не работает.
-3. Показать, что клиент B продолжает выполнять SQL через свой PgBouncer.
+1. Остановить `pgbouncer-client-a` или `haproxy-client-a`.
+2. Показать, что клиент A не работает через свою цепочку подключения.
+3. Показать, что клиент B продолжает выполнять SQL через `pgbouncer-client-b` и `haproxy-client-b`.
 4. Сохранить вывод в `demo/04-proxy-failure/artifacts/`.
 
 ## Логическая ошибка
