@@ -1,5 +1,7 @@
 # Runbooks
 
+![Сценарии отказа PostgreSQL HA-кластера](diagrams/png/06_failure_scenarios.png)
+
 ## Отказ primary
 
 1. Зафиксировать текущее состояние `docker compose ps`.

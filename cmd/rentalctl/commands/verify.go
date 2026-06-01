@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rental-housing-platform-db/internal/pg"
-	"rental-housing-platform-db/internal/runner"
+	"rental-housing-platform-db/cmd/rentalctl/util"
 )
 
 func newVerifyCommand() *cobra.Command {
@@ -23,10 +22,10 @@ func newVerifyCommand() *cobra.Command {
 }
 
 func verify(ctx context.Context) error {
-	if err := runner.DockerCompose(ctx, "ps"); err != nil {
+	if err := util.DockerCompose(ctx, "ps"); err != nil {
 		return err
 	}
 
 	query := `-c "select now() as checked_at, inet_server_addr() as server_addr, pg_is_in_recovery() as is_replica;"`
-	return runner.DockerCompose(ctx, pg.PSQLArgs([]string{query})...)
+	return util.DockerCompose(ctx, util.PostgresClientPSQLArgs([]string{query})...)
 }

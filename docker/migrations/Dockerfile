@@ -2,13 +2,12 @@ FROM golang:1.25-alpine AS cli-builder
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
+COPY cmd/rentalctl/go.mod cmd/rentalctl/go.sum ./
 RUN go mod download
 
-COPY cmd ./cmd
-COPY internal ./internal
+COPY cmd/rentalctl ./
 
-RUN go build -o /out/rentalctl ./cmd/rentalctl
+RUN go build -o /out/rentalctl .
 
 FROM alpine:3.22
 

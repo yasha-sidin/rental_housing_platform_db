@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rental-housing-platform-db/internal/runner"
+	"rental-housing-platform-db/cmd/rentalctl/util"
 )
 
 type prepareOptions struct {
@@ -80,19 +80,19 @@ func newMigratePrepareCommand() *cobra.Command {
 
 func runMigration(ctx context.Context, args ...string) error {
 	composeArgs := append([]string{"run", "--rm", "--no-deps", "migration_runner", "rentalctl", "migrate-container"}, args...)
-	return runner.DockerCompose(ctx, composeArgs...)
+	return util.DockerCompose(ctx, composeArgs...)
 }
 
 func captureMigration(ctx context.Context, args ...string) (string, error) {
 	composeArgs := append([]string{"run", "--rm", "--no-deps", "migration_runner", "rentalctl", "migrate-container"}, args...)
-	return runner.DockerComposeCapture(ctx, composeArgs...)
+	return util.DockerComposeCapture(ctx, composeArgs...)
 }
 
 func migrateContainer(ctx context.Context, args ...string) error {
 	opts := prepareOptions{
-		sourceUpDir:   envOrDefault("SOURCE_UP_DIR", "/workspace/db/migrations"),
-		sourceDownDir: envOrDefault("SOURCE_DOWN_DIR", "/workspace/db/rollback"),
-		outputDir:     envOrDefault("OUTPUT_DIR", "/tmp/migrations"),
+		sourceUpDir:   util.EnvOrDefault("SOURCE_UP_DIR", "/workspace/db/migrations"),
+		sourceDownDir: util.EnvOrDefault("SOURCE_DOWN_DIR", "/workspace/db/rollback"),
+		outputDir:     util.EnvOrDefault("OUTPUT_DIR", "/tmp/migrations"),
 	}
 	if err := prepareMigrations(opts); err != nil {
 		return err
@@ -104,7 +104,7 @@ func migrateContainer(ctx context.Context, args ...string) error {
 	}
 
 	migrateArgs := append([]string{"-path", opts.outputDir, "-database", dsn}, args...)
-	return runner.Run(ctx, "migrate", migrateArgs...)
+	return util.RunCommand(ctx, "migrate", migrateArgs...)
 }
 
 func prepareMigrations(opts prepareOptions) error {
@@ -232,9 +232,9 @@ func databaseURL() (string, error) {
 		return "", fmt.Errorf("POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB must be set")
 	}
 
-	host := envOrDefault("DB_HOST", "rental_housing_platform_db")
-	port := envOrDefault("DB_PORT", "5432")
-	sslMode := envOrDefault("DB_SSLMODE", "disable")
+	host := util.EnvOrDefault("DB_HOST", "rental_housing_platform_db")
+	port := util.EnvOrDefault("DB_PORT", "5432")
+	sslMode := util.EnvOrDefault("DB_SSLMODE", "disable")
 
 	u := url.URL{
 		Scheme: "postgres",

@@ -23,7 +23,7 @@ bootstrap:
       use_slots: true
       parameters:
         archive_mode: "on"
-        archive_command: "if [ \"${ENABLE_WAL_ARCHIVE}\" = \"true\" ]; then pgbackrest --stanza=${PGBACKREST_STANZA} archive-push %p; else exit 0; fi"
+        archive_command: "pgbackrest --stanza=${PGBACKREST_STANZA} archive-push %p"
         archive_timeout: "60s"
         hot_standby: "on"
         max_connections: 200

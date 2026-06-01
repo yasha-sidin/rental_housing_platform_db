@@ -49,4 +49,4 @@
 
 ## 08-observability
 
-Показать PMM dashboard и HAProxy stats для клиентских HAProxy.
+Показать dashboard Percona Monitoring and Management и HAProxy stats для клиентских HAProxy.

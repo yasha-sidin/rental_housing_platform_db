@@ -1,6 +1,6 @@
-package pg
+package util
 
-func PSQLArgs(sqlOrFile []string) []string {
+func PostgresClientPSQLArgs(sqlOrFile []string) []string {
 	args := []string{
 		"run",
 		"--rm",

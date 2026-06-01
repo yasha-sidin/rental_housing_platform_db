@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func envOrDefault(name string, fallback string) string {
+func EnvOrDefault(name string, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
 		return fallback
@@ -15,11 +15,11 @@ func envOrDefault(name string, fallback string) string {
 	return value
 }
 
-func logInfo(format string, args ...any) {
+func LogInfo(format string, args ...any) {
 	fmt.Fprintf(os.Stdout, "[rentalctl] "+format+"\n", args...)
 }
 
-func compactError(err error) string {
+func CompactError(err error) string {
 	text := strings.TrimSpace(err.Error())
 	if text == "" {
 		return "unknown error"
@@ -28,7 +28,7 @@ func compactError(err error) string {
 	return strings.TrimSpace(lines[0])
 }
 
-func lastIntegerLine(text string) (int, bool) {
+func LastIntegerLine(text string) (int, bool) {
 	lines := strings.Split(text, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])

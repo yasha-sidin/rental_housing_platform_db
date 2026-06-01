@@ -4,6 +4,8 @@
 
 Контур высокой доступности - часть архитектуры, отвечающая за непрерывную работу базы данных при отказе отдельных узлов. В этом проекте он состоит из PostgreSQL, Patroni, etcd, клиентских прокси и правил синхронной записи.
 
+![Контур высокой доступности PostgreSQL](diagrams/png/02_postgresql_ha_contour.png)
+
 ```text
 postgres-node-1: PostgreSQL + Patroni
 postgres-node-2: PostgreSQL + Patroni
@@ -50,7 +52,11 @@ client-a -> PgBouncer A -> HAProxy A -> PostgreSQL/Patroni
 client-b -> PgBouncer B -> HAProxy B -> PostgreSQL/Patroni
 ```
 
+![Клиентские цепочки PgBouncer и HAProxy](diagrams/png/03_client_proxy_contour.png)
+
 У каждого демонстрационного клиента есть своя цепочка подключения. PgBouncer держит пул соединений, а HAProxy выбирает актуальный маршрут к кластеру. Такая схема убирает единую точку отказа на уровне клиентского прокси: отказ `pgbouncer-client-a` или `haproxy-client-a` влияет только на клиента A.
+
+Административные учетные записи PgBouncer также разделены по клиентам. Это делает демонстрацию отказа и обслуживания прокси аккуратнее: действия с PgBouncer клиента A не требуют общей административной учетной записи для PgBouncer клиента B.
 
 Каждый HAProxy использует Patroni REST API:
 
@@ -71,4 +77,24 @@ client-b -> PgBouncer B -> HAProxy B -> PostgreSQL/Patroni
   чтение -> маршрут записи
 ```
 
+![Режимы клиентского чтения](diagrams/png/04_client_read_modes.png)
+
 Строгая сессия дает простую гарантию read-after-write: если клиент сразу после записи должен увидеть собственные изменения, он читает через маршрут записи с текущего основного узла.
+
+## Хранилище резервных копий
+
+В демонстрационном стенде S3-совместимое хранилище представлено контейнером MinIO:
+
+```text
+PostgreSQL/pgBackRest -> MinIO bucket rental-ha-backups
+backup-worker-a      -> MinIO bucket rental-ha-backups
+backup-worker-b      -> MinIO bucket rental-ha-backups
+```
+
+MinIO нужен для воспроизводимой локальной демонстрации backup и PITR. Он не заменяет production-хранилище: в реальной системе этот компонент должен быть внешним сервисом с высокой доступностью, версионированием, политиками хранения и защитой от удаления.
+
+## Наблюдаемость
+
+![Контур наблюдаемости](diagrams/png/08_observability_contour.png)
+
+Percona Monitoring and Management используется как демонстрационный центр наблюдения. Через него на защите удобно показать состояние PostgreSQL-узлов, роли, репликацию, доступность etcd, маршруты HAProxy, пулы PgBouncer и состояние backup-контура.
