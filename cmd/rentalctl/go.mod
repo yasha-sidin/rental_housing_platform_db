@@ -1,4 +1,4 @@
-module rental-housing-platform-db
+module rental-housing-platform-db/cmd/rentalctl
 
 go 1.25.0
 

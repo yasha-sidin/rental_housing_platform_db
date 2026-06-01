@@ -103,6 +103,41 @@ CREATE TRIGGER trg_bookings_validate_status_transition
     FOR EACH ROW
 EXECUTE FUNCTION trg_bookings_validate_status_transition();
 
+CREATE OR REPLACE FUNCTION trg_listing_availability_days_block_status_change_on_active_hold()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = application, public, pg_temp
+AS
+$$
+DECLARE
+    v_has_active_hold BOOLEAN;
+BEGIN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       AND OLD.status = 'held'
+       AND NEW.status IN ('available', 'blocked') THEN
+        SELECT EXISTS (
+            SELECT 1
+            FROM booking_days bd
+                     JOIN bookings b ON b.id = bd.booking_id
+            WHERE bd.availability_day_id = OLD.id
+              AND bd.listing_id = OLD.listing_id
+              AND b.status IN ('created', 'payment_pending', 'confirmed')
+        ) INTO v_has_active_hold;
+
+        IF v_has_active_hold THEN
+            RAISE EXCEPTION 'cannot change availability day status while it is held by active booking, day_id=%', OLD.id;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_listing_availability_days_block_status_change_on_active_hold
+    BEFORE UPDATE ON listing_availability_days
+    FOR EACH ROW
+EXECUTE FUNCTION trg_listing_availability_days_block_status_change_on_active_hold();
+
 CREATE OR REPLACE FUNCTION trg_booking_days_prevent_active_overlap()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -165,7 +200,7 @@ BEGIN
     WHERE id = NEW.booking_id
     FOR UPDATE;
 
-    IF now() > v_booking_expires_at THEN
+    IF now() > v_booking_expires_at OR NEW.initiated_date > v_booking_expires_at THEN
         RAISE EXCEPTION 'payment session cannot start after booking expiration, booking_id=%', NEW.booking_id;
     END IF;
 

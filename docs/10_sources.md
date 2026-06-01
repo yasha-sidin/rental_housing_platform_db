@@ -8,6 +8,7 @@
 - Patroni REST API: https://patroni.readthedocs.io/en/latest/rest_api.html
 - etcd documentation: https://etcd.io/docs/
 - pgBackRest user guide: https://pgbackrest.org/user-guide.html
+- MinIO documentation: https://min.io/docs/
 - PgBouncer documentation: https://www.pgbouncer.org/usage.html
 - HAProxy documentation: https://www.haproxy.com/documentation/
 - Percona Monitoring and Management docs: https://docs.percona.com/percona-monitoring-and-management/

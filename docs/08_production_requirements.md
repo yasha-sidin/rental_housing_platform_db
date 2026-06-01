@@ -2,6 +2,8 @@
 
 Docker-стенд демонстрационный. Для production нужны дополнительные требования.
 
+![Требования к production-системе](diagrams/png/07_production_requirements.png)
+
 ## Размещение
 
 - Узлы должны быть разнесены по failure domains.
@@ -16,7 +18,7 @@ Docker-стенд демонстрационный. Для production нужны
 
 ## Backup repository
 
-- Надежное S3-compatible object storage.
+- Надежное внешнее S3-compatible object storage. Локальный MinIO из Docker-стенда не является production-хранилищем.
 - Versioning.
 - Object Lock/WORM для защиты от удаления и ransomware-сценариев.
 - Encryption at rest.

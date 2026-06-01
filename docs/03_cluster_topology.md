@@ -1,8 +1,10 @@
-# Cluster Topology
+# Топология кластера
 
-## PostgreSQL HA-контур
+## Контур высокой доступности PostgreSQL
 
-Контур высокой доступности - часть архитектуры, отвечающая за непрерывную работу базы данных при отказе отдельных узлов.
+Контур высокой доступности - часть архитектуры, отвечающая за непрерывную работу базы данных при отказе отдельных узлов. В этом проекте он состоит из PostgreSQL, Patroni, etcd, клиентских прокси и правил синхронной записи.
+
+![Контур высокой доступности PostgreSQL](diagrams/png/02_postgresql_ha_contour.png)
 
 ```text
 postgres-node-1: PostgreSQL + Patroni
@@ -12,7 +14,7 @@ postgres-node-4: PostgreSQL + Patroni
 postgres-node-5: PostgreSQL + Patroni
 ```
 
-Patroni управляет ролью узла, promotion и failover. PostgreSQL хранит бизнес-данные. etcd хранит состояние кластера и leader lock.
+PostgreSQL хранит бизнес-данные платформы аренды жилья. Patroni управляет ролью каждого узла: определяет текущий основной узел, следит за репликами и выполняет переключение при отказе.
 
 ## etcd
 
@@ -24,7 +26,9 @@ etcd-4
 etcd-5
 ```
 
-Для 5 etcd-узлов quorum равен 3. Контур переживает отказ двух etcd-узлов.
+Patroni использует etcd как согласованное хранилище состояния кластера. Там фиксируется, какой PostgreSQL-узел сейчас основной, какие узлы доступны и можно ли безопасно выполнить переключение.
+
+Для 5 etcd-узлов кворум равен 3. Это означает, что система согласования продолжает работать при отказе двух etcd-узлов.
 
 ## Синхронная репликация
 
@@ -39,32 +43,58 @@ postgresql:
     synchronous_commit: "on"
 ```
 
-Запись доступна, когда есть primary и минимум две synchronous replicas. Если synchronous replicas меньше двух, запись останавливается.
+Запись доступна, когда есть основной узел и минимум две синхронные реплики. Если синхронных реплик становится меньше двух, запись останавливается. Это защитное поведение: система временно снижает доступность записи, но не подтверждает данные с ослабленной гарантией.
 
-## Proxy-контур
+## Клиентский контур подключения
 
 ```text
-client-a -> PgBouncer -> HAProxy -> PostgreSQL/Patroni
-client-b -> PgBouncer -> HAProxy -> PostgreSQL/Patroni
+client-a -> PgBouncer A -> HAProxy A -> PostgreSQL/Patroni
+client-b -> PgBouncer B -> HAProxy B -> PostgreSQL/Patroni
 ```
 
-HAProxy использует Patroni REST API:
+![Клиентские цепочки PgBouncer и HAProxy](diagrams/png/03_client_proxy_contour.png)
 
-- `/primary` для writer backend;
-- `/replica` для reader backend.
+У каждого демонстрационного клиента есть своя цепочка подключения. PgBouncer держит пул соединений, а HAProxy выбирает актуальный маршрут к кластеру. Такая схема убирает единую точку отказа на уровне клиентского прокси: отказ `pgbouncer-client-a` или `haproxy-client-a` влияет только на клиента A.
 
-PgBouncer дает pooling на стороне клиента. После failover нужно переоткрывать server connections через timeout/lifetime или явный `RECONNECT`.
+Административные учетные записи PgBouncer также разделены по клиентам. Это делает демонстрацию отказа и обслуживания прокси аккуратнее: действия с PgBouncer клиента A не требуют общей административной учетной записи для PgBouncer клиента B.
+
+Каждый HAProxy использует Patroni REST API:
+
+- `/primary` - для маршрута записи;
+- `/replica` - для маршрута чтения.
+
+После failover PgBouncer должен переоткрыть server connections через timeout/lifetime или явный `RECONNECT`, чтобы старые соединения не оставались привязанными к прежнему основному узлу.
 
 ## Режимы чтения
 
 ```text
-normal session:
-  write -> writer
-  read  -> reader
+обычная сессия:
+  запись -> маршрут записи
+  чтение -> маршрут чтения
 
-strong session:
-  write -> writer
-  read  -> writer
+строгая сессия:
+  запись -> маршрут записи
+  чтение -> маршрут записи
 ```
 
-`strong session` дает простую гарантию read-after-write без LSN-token и ожидания replay на конкретной реплике.
+![Режимы клиентского чтения](diagrams/png/04_client_read_modes.png)
+
+Строгая сессия дает простую гарантию read-after-write: если клиент сразу после записи должен увидеть собственные изменения, он читает через маршрут записи с текущего основного узла.
+
+## Хранилище резервных копий
+
+В демонстрационном стенде S3-совместимое хранилище представлено контейнером MinIO:
+
+```text
+PostgreSQL/pgBackRest -> MinIO bucket rental-ha-backups
+backup-worker-a      -> MinIO bucket rental-ha-backups
+backup-worker-b      -> MinIO bucket rental-ha-backups
+```
+
+MinIO нужен для воспроизводимой локальной демонстрации backup и PITR. Он не заменяет production-хранилище: в реальной системе этот компонент должен быть внешним сервисом с высокой доступностью, версионированием, политиками хранения и защитой от удаления.
+
+## Наблюдаемость
+
+![Контур наблюдаемости](diagrams/png/08_observability_contour.png)
+
+Percona Monitoring and Management используется как демонстрационный центр наблюдения. Через него на защите удобно показать состояние PostgreSQL-узлов, роли, репликацию, доступность etcd, маршруты HAProxy, пулы PgBouncer и состояние backup-контура.

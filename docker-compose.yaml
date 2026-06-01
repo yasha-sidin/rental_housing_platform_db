@@ -1,6 +1,9 @@
 x-etcd-common: &etcd-common
   image: quay.io/coreos/etcd:v3.6.11
   restart: unless-stopped
+  command:
+    - /usr/local/bin/etcd
+    - --config-file=/etc/etcd/etcd.yml
   networks:
     - rental-ha
 
@@ -14,13 +17,15 @@ x-postgres-env: &postgres-env
   PATRONI_REWIND_PASSWORD: ${PATRONI_REWIND_PASSWORD:-change_me_rewind}
   PGDATA: /var/lib/postgresql/data
   PGBACKREST_STANZA: rental
-  PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+  PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-minio}
+  PGBACKREST_REPO1_STORAGE_PORT: ${S3_PORT:-9000}
   PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
   PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
-  PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
-  PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+  PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-minio_admin}
+  PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-minio_admin_password}
+  PGBACKREST_REPO1_S3_URI_STYLE: path
+  PGBACKREST_REPO1_STORAGE_VERIFY_TLS: "n"
   PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
-  ENABLE_WAL_ARCHIVE: ${ENABLE_WAL_ARCHIVE:-false}
 
 x-postgres-common: &postgres-common
   build:
@@ -39,6 +44,7 @@ x-postgres-common: &postgres-common
     - etcd-3
     - etcd-4
     - etcd-5
+    - minio-init
   volumes:
     - ./cluster/patroni/patroni.yml.tpl:/etc/patroni/patroni.yml.tpl:ro
     - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
@@ -52,85 +58,84 @@ x-postgres-common: &postgres-common
     timeout: 3s
     retries: 30
 
+x-haproxy-common: &haproxy-common
+  image: haproxy:3.3.9-alpine
+  restart: unless-stopped
+  depends_on:
+    - postgres-node-1
+    - postgres-node-2
+    - postgres-node-3
+    - postgres-node-4
+    - postgres-node-5
+  volumes:
+    - ./cluster/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+  networks:
+    - rental-ha
+
 services:
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: minio
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minio_admin_password}
+      MINIO_REGION_NAME: ${S3_REGION:-us-east-1}
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - rental-ha
+
+  minio-init:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: minio-init
+    env_file:
+      - .env
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-ec"]
+    command: >
+      until mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"; do
+        sleep 2;
+      done;
+      mc mb --ignore-existing "local/$$S3_BUCKET";
+    networks:
+      - rental-ha
+
   etcd-1:
     <<: *etcd-common
-    command:
-      - /usr/local/bin/etcd
-      - --name=etcd-1
-      - --data-dir=/etcd-data
-      - --initial-advertise-peer-urls=http://etcd-1:2380
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --advertise-client-urls=http://etcd-1:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=rental-ha-etcd
     volumes:
+      - ./cluster/etcd/etcd-1.yml:/etc/etcd/etcd.yml:ro
       - etcd_1_data:/etcd-data
 
   etcd-2:
     <<: *etcd-common
-    command:
-      - /usr/local/bin/etcd
-      - --name=etcd-2
-      - --data-dir=/etcd-data
-      - --initial-advertise-peer-urls=http://etcd-2:2380
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --advertise-client-urls=http://etcd-2:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=rental-ha-etcd
     volumes:
+      - ./cluster/etcd/etcd-2.yml:/etc/etcd/etcd.yml:ro
       - etcd_2_data:/etcd-data
 
   etcd-3:
     <<: *etcd-common
-    command:
-      - /usr/local/bin/etcd
-      - --name=etcd-3
-      - --data-dir=/etcd-data
-      - --initial-advertise-peer-urls=http://etcd-3:2380
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --advertise-client-urls=http://etcd-3:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=rental-ha-etcd
     volumes:
+      - ./cluster/etcd/etcd-3.yml:/etc/etcd/etcd.yml:ro
       - etcd_3_data:/etcd-data
 
   etcd-4:
     <<: *etcd-common
-    command:
-      - /usr/local/bin/etcd
-      - --name=etcd-4
-      - --data-dir=/etcd-data
-      - --initial-advertise-peer-urls=http://etcd-4:2380
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --advertise-client-urls=http://etcd-4:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=rental-ha-etcd
     volumes:
+      - ./cluster/etcd/etcd-4.yml:/etc/etcd/etcd.yml:ro
       - etcd_4_data:/etcd-data
 
   etcd-5:
     <<: *etcd-common
-    command:
-      - /usr/local/bin/etcd
-      - --name=etcd-5
-      - --data-dir=/etcd-data
-      - --initial-advertise-peer-urls=http://etcd-5:2380
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --advertise-client-urls=http://etcd-5:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=rental-ha-etcd
     volumes:
+      - ./cluster/etcd/etcd-5.yml:/etc/etcd/etcd.yml:ro
       - etcd_5_data:/etcd-data
 
   postgres-node-1:
@@ -208,24 +213,21 @@ services:
       - ./db/seeds:/workspace/db/seeds:ro
       - ./db/tests:/workspace/db/tests:ro
 
-  haproxy:
-    image: haproxy:3.3.9-alpine
-    container_name: rental-haproxy
-    restart: unless-stopped
-    depends_on:
-      - postgres-node-1
-      - postgres-node-2
-      - postgres-node-3
-      - postgres-node-4
-      - postgres-node-5
-    volumes:
-      - ./cluster/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+  haproxy-client-a:
+    <<: *haproxy-common
+    container_name: haproxy-client-a
     ports:
       - "6432:5000"
       - "6433:5001"
       - "7000:7000"
-    networks:
-      - rental-ha
+
+  haproxy-client-b:
+    <<: *haproxy-common
+    container_name: haproxy-client-b
+    ports:
+      - "6434:5000"
+      - "6435:5001"
+      - "7002:7000"
 
   pgbouncer-client-a:
     build:
@@ -238,13 +240,13 @@ services:
     env_file:
       - .env
     environment:
-      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}
-      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
+      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_CLIENT_A_ADMIN_USER:-pgbouncer_admin_a}
+      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_CLIENT_A_ADMIN_PASSWORD:-pgbouncer_admin_a_password}
       PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      - haproxy
+      - haproxy-client-a
     volumes:
-      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./cluster/pgbouncer/pgbouncer-client-a.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
       - "15432:6432"
     networks:
@@ -261,13 +263,13 @@ services:
     env_file:
       - .env
     environment:
-      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}
-      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD:-pgbouncer_admin_password}
+      PGBOUNCER_ADMIN_USER: ${PGBOUNCER_CLIENT_B_ADMIN_USER:-pgbouncer_admin_b}
+      PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_CLIENT_B_ADMIN_PASSWORD:-pgbouncer_admin_b_password}
       PGBOUNCER_LISTEN_PORT: 6432
     depends_on:
-      - haproxy
+      - haproxy-client-b
     volumes:
-      - ./cluster/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./cluster/pgbouncer/pgbouncer-client-b.ini:/etc/pgbouncer/pgbouncer.ini:ro
     ports:
       - "15433:6432"
     networks:
@@ -280,11 +282,11 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: haproxy
+      DB_HOST: haproxy-client-a
       DB_PORT: 5000
       DB_SSLMODE: disable
     depends_on:
-      - haproxy
+      - haproxy-client-a
     volumes:
       - ./db/migrations:/workspace/db/migrations:ro
       - ./db/rollback:/workspace/db/rollback:ro
@@ -315,12 +317,17 @@ services:
     env_file:
       - .env
     environment:
-      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-minio}
+      PGBACKREST_REPO1_STORAGE_PORT: ${S3_PORT:-9000}
       PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
       PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
-      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
-      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-minio_admin}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-minio_admin_password}
+      PGBACKREST_REPO1_S3_URI_STYLE: path
+      PGBACKREST_REPO1_STORAGE_VERIFY_TLS: "n"
       PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
+    depends_on:
+      - minio-init
     command: ["sleep", "infinity"]
     volumes:
       - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
@@ -340,12 +347,17 @@ services:
     env_file:
       - .env
     environment:
-      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-s3.example.local}
+      PGBACKREST_REPO1_S3_ENDPOINT: ${S3_ENDPOINT:-minio}
+      PGBACKREST_REPO1_STORAGE_PORT: ${S3_PORT:-9000}
       PGBACKREST_REPO1_S3_BUCKET: ${S3_BUCKET:-rental-ha-backups}
       PGBACKREST_REPO1_S3_REGION: ${S3_REGION:-us-east-1}
-      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-change_me}
-      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-change_me}
+      PGBACKREST_REPO1_S3_KEY: ${S3_ACCESS_KEY:-minio_admin}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${S3_SECRET_KEY:-minio_admin_password}
+      PGBACKREST_REPO1_S3_URI_STYLE: path
+      PGBACKREST_REPO1_STORAGE_VERIFY_TLS: "n"
       PGBACKREST_REPO1_CIPHER_PASS: ${POSTGRES_PASSWORD:-change_me}
+    depends_on:
+      - minio-init
     command: ["sleep", "infinity"]
     volumes:
       - ./cluster/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
@@ -376,6 +388,7 @@ volumes:
   postgres_node_3_data:
   postgres_node_4_data:
   postgres_node_5_data:
+  minio_data:
   pmm_data:
 
 networks:

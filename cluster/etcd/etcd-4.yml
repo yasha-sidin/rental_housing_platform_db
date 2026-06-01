@@ -1,0 +1,9 @@
+name: etcd-4
+data-dir: /etcd-data
+initial-advertise-peer-urls: http://etcd-4:2380
+listen-peer-urls: http://0.0.0.0:2380
+advertise-client-urls: http://etcd-4:2379
+listen-client-urls: http://0.0.0.0:2379
+initial-cluster: etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380,etcd-4=http://etcd-4:2380,etcd-5=http://etcd-5:2380
+initial-cluster-state: new
+initial-cluster-token: rental-ha-etcd
