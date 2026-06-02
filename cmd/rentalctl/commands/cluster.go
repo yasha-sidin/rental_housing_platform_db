@@ -111,14 +111,14 @@ PGPASSWORD="$POSTGRES_PASSWORD" createdb -h haproxy-client-a -p 5000 -U "$POSTGR
 }
 
 func ensureBackupStanza(ctx context.Context) error {
-	command := `pgbackrest --stanza=rental stanza-create || pgbackrest --stanza=rental info >/dev/null
-pgbackrest --stanza=rental check`
+	command := `pgbackrest --stanza=rental --pg1-user="$POSTGRES_USER" stanza-create
+pgbackrest --stanza=rental --pg1-user="$POSTGRES_USER" check`
 
 	deadline := time.Now().Add(5 * time.Minute)
 	attempt := 1
 
 	for time.Now().Before(deadline) {
-		if err := util.DockerCompose(ctx, "exec", "-T", "postgres-node-4", "sh", "-ec", command); err != nil {
+		if err := runPgBackRestOnPrimary(ctx, command); err != nil {
 			util.LogInfo("pgBackRest stanza check #%d is not ready yet: %s", attempt, util.CompactError(err))
 			attempt++
 			time.Sleep(5 * time.Second)
