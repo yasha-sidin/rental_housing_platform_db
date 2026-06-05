@@ -220,8 +220,9 @@ cmd/rentalctl/
 - `docs/04_cluster_topology.md` - устройство кластера: Patroni, etcd, PgBouncer, HAProxy и Percona Monitoring and Management.
 - `docs/05_rpo_rto.md` - RPO, RTO и границы гарантий.
 - `docs/06_backup_pitr.md` - резервное копирование, pgBackRest, архив WAL и PITR.
-- `docs/07_runbooks.md` - инструкции для действий при отказах.
-- `docs/08_demo_plan.md` - план демонстрации на защите.
-- `docs/09_production_requirements.md` - требования к реальной production-системе.
-- `docs/10_sources.md` - источники и документация инструментов.
+- `docs/07_runbooks.md` - операционные инструкции для действий при отказах.
+- `docs/08_production_requirements.md` - требования к реальной production-системе.
+- `docs/09_sources.md` - источники и документация инструментов.
 - `docs/adr/` - архитектурные решения и их обоснование.
+- `scenarios/` - операционные и аналитические SQL-сценарии с артефактами выполнения.
+- `docs/presentation/rental_housing_platform_db_defense.pptx` - презентация для защиты проекта.
