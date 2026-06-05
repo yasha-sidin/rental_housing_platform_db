@@ -4,7 +4,7 @@ Percona Monitoring and Management используется как контур �
 
 ## Доступ
 
-PMM открывается на `http://localhost:8080/graph/login`.
+Percona Monitoring and Management открывается на `http://localhost:8080/graph/login`.
 
 Учетные данные задаются через локальный `.env`; шаблон переменных хранится в корневом `.env.example`:
 
@@ -13,7 +13,7 @@ PMM_ADMIN_USER=admin
 PMM_ADMIN_PASSWORD=pmm_admin_local_demo
 ```
 
-Docker Compose передает эти значения в PMM Server как переменные Grafana:
+Docker Compose передает эти значения в Percona Monitoring and Management Server как переменные Grafana:
 
 ```yaml
 GF_SECURITY_ADMIN_USER
@@ -24,7 +24,7 @@ GF_SECURITY_ADMIN_PASSWORD
 
 ## Регистрация сервисов
 
-PMM Server запускает `cluster/pmm/register-services.sh` после готовности собственного веб-интерфейса. Скрипт регистрирует:
+Percona Monitoring and Management Server запускает `cluster/pmm/register-services.sh` после готовности собственного веб-интерфейса. Скрипт регистрирует:
 
 - пять PostgreSQL-узлов через штатный `postgres_exporter`;
 - пять Patroni REST `/metrics` endpoints как внешние Prometheus endpoints;
@@ -33,13 +33,13 @@ PMM Server запускает `cluster/pmm/register-services.sh` после го
 - два `backup-worker` как внешние Prometheus endpoints;
 - `pmm-custom-exporter` как внешний exporter для дополнительных метрик проекта.
 
-Регистрация идемпотентна: если сервис уже есть в PMM inventory, повторный запуск его не дублирует.
+Регистрация идемпотентна: если сервис уже есть в inventory Percona Monitoring and Management, повторный запуск его не дублирует.
 
-Штатный дашборд PMM `PostgreSQL Patroni Details` использует отдельные Patroni-сервисы. Для него нужно выбирать `Service Name` вида `patroni-postgres-node-1` и `Scope Name` = `rental-ha`. При пустых значениях этих переменных дашборд не сможет найти `patroni_*` метрики.
+Штатный дашборд Percona Monitoring and Management `PostgreSQL Patroni Details` использует отдельные Patroni-сервисы. Для него нужно выбирать `Service Name` вида `patroni-postgres-node-1` и `Scope Name` = `rental-ha`. При пустых значениях этих переменных дашборд не сможет найти `patroni_*` метрики.
 
 ## Главный дашборд
 
-После регистрации сервисов PMM Server запускает `cluster/pmm/provision-dashboard.py`. Скрипт создает или обновляет дашборд `Rental HA Overview` и назначает его домашним экраном Grafana.
+После регистрации сервисов Percona Monitoring and Management Server запускает `cluster/pmm/provision-dashboard.py`. Скрипт создает или обновляет дашборд `Rental HA Overview` и назначает его домашним экраном Grafana.
 
 Дашборд собирает на одном экране:
 
@@ -58,7 +58,7 @@ PMM Server запускает `cluster/pmm/register-services.sh` после го
 
 `cluster/pmm/custom_exporter.py` поднимается отдельным контейнером `pmm-custom-exporter` и отдает метрики на `http://pmm-custom-exporter:9187/metrics`.
 
-Он покрывает то, что не добавляется штатной командой PMM:
+Он покрывает то, что не добавляется штатной командой Percona Monitoring and Management:
 
 - состояние Patroni REST API по каждому PostgreSQL-узлу;
 - текущую роль узла через проверки `/primary` и `/replica`;
@@ -72,10 +72,10 @@ PMM Server запускает `cluster/pmm/register-services.sh` после го
 - состояние репозитория pgBackRest через `pgbackrest info --output=json`;
 - наличие и время последней полной резервной копии, если она уже создана.
 
-`cluster/pmm/backup_worker_exporter.py` запускается внутри `backup-worker-a` и `backup-worker-b`. Он показывает, что конкретный исполнитель резервного копирования доступен для PMM и что из него выполняется `pgbackrest info --output=json`.
+`cluster/pmm/backup_worker_exporter.py` запускается внутри `backup-worker-a` и `backup-worker-b`. Он показывает, что конкретный исполнитель резервного копирования доступен для Percona Monitoring and Management и что из него выполняется `pgbackrest info --output=json`.
 
 ## Границы
 
-PMM 3.8.0 в используемом образе не содержит штатной команды `pmm-admin add pgbouncer`. Поэтому PgBouncer контролируется custom exporter через административные SQL-команды `SHOW POOLS`.
+Percona Monitoring and Management 3.8.0 в используемом образе не содержит штатной команды `pmm-admin add pgbouncer`. Поэтому PgBouncer контролируется custom exporter через административные SQL-команды `SHOW POOLS`.
 
-Контур резервного копирования также не имеет готового PMM-интегратора в этой конфигурации. Его состояние контролируется custom exporter через pgBackRest, S3-совместимый репозиторий и отдельные endpoints контейнеров `backup-worker-a/b`.
+Контур резервного копирования также не имеет готового интегратора Percona Monitoring and Management в этой конфигурации. Его состояние контролируется custom exporter через pgBackRest, S3-совместимый репозиторий и отдельные endpoints контейнеров `backup-worker-a/b`.

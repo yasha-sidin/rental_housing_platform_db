@@ -224,4 +224,5 @@ cmd/rentalctl/
 - `docs/08_production_requirements.md` - требования к реальной production-системе.
 - `docs/09_sources.md` - источники и документация инструментов.
 - `docs/adr/` - архитектурные решения и их обоснование.
+- `scenarios/` - операционные и аналитические SQL-сценарии с артефактами выполнения.
 - `docs/presentation/rental_housing_platform_db_defense.pptx` - презентация для защиты проекта.
