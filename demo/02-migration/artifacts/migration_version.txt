@@ -1,2 +1,0 @@
-OK: migrations prepared in /tmp/migrations
-6

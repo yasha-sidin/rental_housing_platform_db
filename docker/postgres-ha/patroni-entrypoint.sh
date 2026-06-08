@@ -42,4 +42,6 @@ mkdir -p "$PGDATA" /var/run/postgresql /var/log/pgbackrest /var/spool/pgbackrest
 chown -R postgres:postgres "$PGDATA" /var/run/postgresql /var/log/pgbackrest /var/spool/pgbackrest
 chmod 700 "$PGDATA"
 
+gosu postgres /opt/patroni/bin/python /usr/local/bin/write-readiness.py &
+
 exec gosu postgres /opt/patroni/bin/patroni "$rendered_path"

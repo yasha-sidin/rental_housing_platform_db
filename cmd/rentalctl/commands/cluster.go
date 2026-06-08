@@ -62,7 +62,7 @@ func clusterUp(ctx context.Context) error {
 		return err
 	}
 
-	util.LogInfo("ensuring application database exists")
+	util.LogInfo("ensuring rental database exists")
 	if err := ensureDatabase(ctx); err != nil {
 		return err
 	}
