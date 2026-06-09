@@ -86,6 +86,10 @@ func runDomainDemo(ctx context.Context) error {
 }
 
 func runMassAnalyticsDemo(ctx context.Context) error {
+	if err := util.DockerCompose(ctx, util.PostgresClientPSQLArgs([]string{"-f", "/workspace/db/seeds/001_reference.sql"})...); err != nil {
+		return err
+	}
+
 	var seedSQL bytes.Buffer
 	if err := seedgen.Generate(&seedSQL, seedgen.Options{
 		Rows:           200,

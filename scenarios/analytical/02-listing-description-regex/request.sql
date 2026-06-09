@@ -18,5 +18,5 @@ FROM (
          FROM listings
      ) AS matched_listing
 WHERE matched_listing.extracted_location IS NOT NULL
-ORDER BY matched_listing.extracted_location;
-
+ORDER BY matched_listing.extracted_location
+LIMIT 10;

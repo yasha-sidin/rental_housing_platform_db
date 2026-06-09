@@ -346,7 +346,19 @@ SELECT l.id,
 FROM seedgen_booking_plan p
          JOIN listings l ON l.description = p.listing_description
          JOIN users guest ON guest.username = p.guest_username
-         JOIN currencies c ON c.code = p.currency_code;
+         JOIN currencies c ON c.code = p.currency_code
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM booking_days existing_booking_day
+             JOIN listing_availability_days existing_day
+                  ON existing_day.id = existing_booking_day.availability_day_id
+                 AND existing_day.listing_id = existing_booking_day.listing_id
+             JOIN bookings existing_booking
+                  ON existing_booking.id = existing_booking_day.booking_id
+    WHERE existing_day.listing_id = l.id
+      AND existing_day.available_date = (current_date + p.day_offset)::date
+      AND existing_booking.created_by_user_id = guest.id
+);
 
 UPDATE seedgen_booking_plan p
 SET booking_id = b.id
