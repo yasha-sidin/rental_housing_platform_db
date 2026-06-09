@@ -3,12 +3,16 @@ import json
 import os
 import subprocess
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.request import Request, urlopen
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 POSTGRES_NODES = [f"postgres-node-{idx}" for idx in range(1, 6)]
 ETCD_NODES = [f"etcd-{idx}" for idx in range(1, 6)]
+HTTP_TIMEOUT = float(os.environ.get("PMM_CUSTOM_EXPORTER_HTTP_TIMEOUT", "0.75"))
+PSQL_CONNECT_TIMEOUT = os.environ.get("PMM_CUSTOM_EXPORTER_PSQL_CONNECT_TIMEOUT", "1")
+PSQL_COMMAND_TIMEOUT = float(os.environ.get("PMM_CUSTOM_EXPORTER_PSQL_COMMAND_TIMEOUT", "1"))
+PGBACKREST_TIMEOUT = float(os.environ.get("PMM_CUSTOM_EXPORTER_PGBACKREST_TIMEOUT", "1"))
 
 
 def metric(name, value, labels=None):
@@ -19,14 +23,35 @@ def metric(name, value, labels=None):
     return f"{name}{label_text} {value}"
 
 
-def http_get(url, timeout=2):
-    request = Request(url, headers={"User-Agent": "rental-pmm-custom-exporter"})
-    with urlopen(request, timeout=timeout) as response:
-        body = response.read()
-        return response.status, body
+def http_get(url, timeout=HTTP_TIMEOUT):
+    completed = subprocess.run(
+        [
+            "curl",
+            "-sS",
+            "--connect-timeout",
+            str(timeout),
+            "--max-time",
+            str(timeout),
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            url,
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout + 0.5,
+    )
+    status_text = completed.stdout.strip()
+    status = int(status_text[-3:]) if status_text else 0
+    if completed.returncode != 0 and status == 0:
+        raise RuntimeError(completed.stderr.strip() or "HTTP request failed")
+    return status, b""
 
 
-def http_status(url, timeout=2):
+def http_status(url, timeout=HTTP_TIMEOUT):
     status, _ = http_get(url, timeout=timeout)
     return status
 
@@ -39,6 +64,51 @@ def http_status_metrics(lines, name, url, labels):
     except Exception:
         lines.append(metric(name, 0, labels))
         lines.append(metric(f"{name}_status_code", 0, labels))
+
+
+def collect_http_status(name, url, labels):
+    lines = []
+    http_status_metrics(lines, name, url, labels)
+    return lines
+
+
+def collect_patroni_node_metrics(node):
+    lines = []
+    health_status = 0
+    primary_status = 0
+    replica_status = 0
+
+    try:
+        health_status = http_status(f"http://{node}:8008/health")
+    except Exception:
+        pass
+    if 200 <= health_status < 300:
+        try:
+            primary_status = http_status(f"http://{node}:8008/primary")
+        except Exception:
+            pass
+        try:
+            replica_status = http_status(f"http://{node}:8008/replica")
+        except Exception:
+            pass
+
+    lines.append(metric("rental_patroni_up", 1 if 200 <= health_status < 300 else 0, {"node": node}))
+    lines.append(metric("rental_patroni_up_status_code", health_status, {"node": node}))
+    lines.append(metric("rental_patroni_primary", 1 if 200 <= primary_status < 300 else 0, {"node": node}))
+    lines.append(metric("rental_patroni_primary_status_code", primary_status, {"node": node}))
+    lines.append(metric("rental_patroni_replica", 1 if 200 <= replica_status < 300 else 0, {"node": node}))
+    lines.append(metric("rental_patroni_replica_status_code", replica_status, {"node": node}))
+
+    if not 200 <= health_status < 300:
+        component_state(lines, "PostgreSQL/Patroni", node, "down", "down", "Patroni REST API is unreachable")
+    elif 200 <= primary_status < 300:
+        component_state(lines, "PostgreSQL/Patroni", node, "primary", "up", "Patroni REST API is healthy")
+    elif 200 <= replica_status < 300:
+        component_state(lines, "PostgreSQL/Patroni", node, "replica", "up", "Patroni REST API is healthy")
+    else:
+        component_state(lines, "PostgreSQL/Patroni", node, "unknown", "up", "Patroni REST API is healthy")
+
+    return lines
 
 
 def component_state(lines, component_type, component, state, health, detail):
@@ -57,7 +127,61 @@ def component_state(lines, component_type, component, state, health, detail):
     )
 
 
-def command_output(args, env=None, timeout=10):
+def collector_status_metrics(name, up, duration):
+    labels = {"collector": name}
+    return [
+        metric("rental_custom_exporter_collector_up", up, labels),
+        metric("rental_custom_exporter_collector_duration_seconds", f"{duration:.6f}", labels),
+    ]
+
+
+def collector_error_metrics(name, error, duration):
+    labels = {"collector": name, "error": type(error).__name__}
+    return [
+        *collector_status_metrics(name, 0, duration),
+        metric("rental_custom_exporter_collector_error", 1, labels),
+    ]
+
+
+def normalize_collector(collector):
+    if isinstance(collector, tuple):
+        return collector
+    return getattr(collector, "__name__", "collector"), collector
+
+
+def run_collector(name, collector):
+    started = time.monotonic()
+    try:
+        collected = collector()
+        duration = time.monotonic() - started
+        return collected + collector_status_metrics(name, 1, duration)
+    except Exception as error:
+        duration = time.monotonic() - started
+        return collector_error_metrics(name, error, duration)
+
+
+def append_parallel(lines, collectors, max_workers=10):
+    if not collectors:
+        return
+
+    normalized = [normalize_collector(collector) for collector in collectors]
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(normalized))) as executor:
+        futures = {executor.submit(run_collector, name, collector): name for name, collector in normalized}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                lines.extend(future.result())
+            except Exception as error:
+                lines.extend(collector_error_metrics(name, error, 0))
+
+
+def collect_from_lines(func, *args):
+    lines = []
+    func(lines, *args)
+    return lines
+
+
+def command_output(args, env=None, timeout=PSQL_COMMAND_TIMEOUT):
     completed = subprocess.run(
         args,
         check=True,
@@ -70,37 +194,57 @@ def command_output(args, env=None, timeout=10):
     return completed.stdout
 
 
+def postgres_recovery_status(node, env, user, database):
+    try:
+        output = command_output(
+            [
+                "psql",
+                "-h",
+                node,
+                "-U",
+                user,
+                "-d",
+                database,
+                "-A",
+                "-t",
+                "-c",
+                "SELECT pg_is_in_recovery();",
+            ],
+            env=env,
+            timeout=PSQL_COMMAND_TIMEOUT,
+        ).strip()
+        return node, output
+    except Exception:
+        return node, None
+
+
 def postgres_cluster_metrics(lines):
     env = os.environ.copy()
     env["PGPASSWORD"] = os.environ.get("POSTGRES_PASSWORD", "")
+    env["PGCONNECT_TIMEOUT"] = PSQL_CONNECT_TIMEOUT
     user = os.environ.get("POSTGRES_USER", "")
     database = os.environ.get("POSTGRES_DB", "postgres")
     primary_node = None
 
-    for node in POSTGRES_NODES:
-        try:
-            output = command_output(
-                [
-                    "psql",
-                    "-h",
-                    node,
-                    "-U",
-                    user,
-                    "-d",
-                    database,
-                    "-A",
-                    "-t",
-                    "-c",
-                    "SELECT pg_is_in_recovery();",
-                ],
-                env=env,
-                timeout=5,
-            ).strip()
+    executor = ThreadPoolExecutor(max_workers=len(POSTGRES_NODES))
+    futures = [
+        executor.submit(postgres_recovery_status, node, env, user, database)
+        for node in POSTGRES_NODES
+    ]
+    try:
+        for future in as_completed(futures):
+            node, output = future.result()
             if output == "f":
                 primary_node = node
                 break
-        except Exception:
-            continue
+    finally:
+        if primary_node:
+            for future in futures:
+                if not future.done():
+                    future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+        else:
+            executor.shutdown(wait=True)
 
     if not primary_node:
         lines.append(metric("rental_postgres_primary_sql_up", 0, {"node": ""}))
@@ -136,7 +280,7 @@ SELECT
                 sql,
             ],
             env=env,
-            timeout=5,
+            timeout=PSQL_COMMAND_TIMEOUT,
         ).strip()
         values = output.split("|")
         lines.append(metric("rental_postgres_primary_sql_up", 1, labels))
@@ -152,33 +296,41 @@ SELECT
         component_state(lines, "PostgreSQL SQL", primary_node, "down", "down", "replication and WAL queries failed")
 
 
-def patroni_component_metrics(lines):
-    for node in POSTGRES_NODES:
+def patroni_component_for_node(node):
+    lines = []
+    try:
+        health_status = http_status(f"http://{node}:8008/health")
+        if not 200 <= health_status < 300:
+            component_state(lines, "PostgreSQL/Patroni", node, "down", "down", "Patroni health is not ready")
+            return lines
+
         try:
-            health_status = http_status(f"http://{node}:8008/health")
-            if not 200 <= health_status < 300:
-                component_state(lines, "PostgreSQL/Patroni", node, "down", "down", "Patroni health is not ready")
-                continue
-
-            try:
-                primary_status = http_status(f"http://{node}:8008/primary")
-            except Exception:
-                primary_status = 0
-            try:
-                replica_status = http_status(f"http://{node}:8008/replica")
-            except Exception:
-                replica_status = 0
-
-            if 200 <= primary_status < 300:
-                state = "primary"
-            elif 200 <= replica_status < 300:
-                state = "replica"
-            else:
-                state = "unknown"
-
-            component_state(lines, "PostgreSQL/Patroni", node, state, "up", "Patroni REST API is healthy")
+            primary_status = http_status(f"http://{node}:8008/primary")
         except Exception:
-            component_state(lines, "PostgreSQL/Patroni", node, "down", "down", "Patroni REST API is unreachable")
+            primary_status = 0
+        try:
+            replica_status = http_status(f"http://{node}:8008/replica")
+        except Exception:
+            replica_status = 0
+
+        if 200 <= primary_status < 300:
+            state = "primary"
+        elif 200 <= replica_status < 300:
+            state = "replica"
+        else:
+            state = "unknown"
+
+        component_state(lines, "PostgreSQL/Patroni", node, state, "up", "Patroni REST API is healthy")
+    except Exception:
+        component_state(lines, "PostgreSQL/Patroni", node, "down", "down", "Patroni REST API is unreachable")
+    return lines
+
+
+def patroni_component_metrics(lines):
+    append_parallel(
+        lines,
+        [(f"patroni_component_{node}", lambda node=node: patroni_component_for_node(node)) for node in POSTGRES_NODES],
+    )
 
 
 def http_component_metrics(lines):
@@ -190,23 +342,39 @@ def http_component_metrics(lines):
             ("MinIO", "minio", "http://minio:9000/minio/health/live", "healthy", "MinIO live endpoint"),
             ("HAProxy", "haproxy-client-a", "http://haproxy-client-a:7000/", "healthy", "HAProxy stats endpoint"),
             ("HAProxy", "haproxy-client-b", "http://haproxy-client-b:7000/", "healthy", "HAProxy stats endpoint"),
-            ("Backup worker", "backup-worker-a", "http://backup-worker-a:9190/metrics", "exporter up", "backup worker exporter"),
-            ("Backup worker", "backup-worker-b", "http://backup-worker-b:9190/metrics", "exporter up", "backup worker exporter"),
+            ("Backup worker", "backup-worker-a", "http://backup-worker-a:9190/health", "exporter up", "backup worker exporter"),
+            ("Backup worker", "backup-worker-b", "http://backup-worker-b:9190/health", "exporter up", "backup worker exporter"),
         ]
     )
 
-    for component_type, component, url, state, detail in checks:
+    def collect_check(component_type, component, url, state, detail):
+        local_lines = []
         try:
             status = http_status(url)
             health = "up" if 200 <= status < 300 else "down"
-            component_state(lines, component_type, component, state if health == "up" else "down", health, detail)
+            component_state(local_lines, component_type, component, state if health == "up" else "down", health, detail)
         except Exception:
-            component_state(lines, component_type, component, "down", "down", detail)
+            component_state(local_lines, component_type, component, "down", "down", detail)
+        return local_lines
+
+    append_parallel(
+        lines,
+        [
+            (
+                f"component_{component_type}_{component}",
+                lambda component_type=component_type, component=component, url=url, state=state, detail=detail: collect_check(
+                    component_type, component, url, state, detail
+                ),
+            )
+            for component_type, component, url, state, detail in checks
+        ],
+    )
 
 
 def pgbouncer_metrics(lines, client, host, user_env, password_env):
     env = os.environ.copy()
     env["PGPASSWORD"] = os.environ.get(password_env, "")
+    env["PGCONNECT_TIMEOUT"] = PSQL_CONNECT_TIMEOUT
     user = os.environ.get(user_env, "")
     labels = {"client": client, "host": host}
 
@@ -231,7 +399,7 @@ def pgbouncer_metrics(lines, client, host, user_env, password_env):
                 "SHOW POOLS;",
             ],
             env=env,
-            timeout=5,
+            timeout=PSQL_COMMAND_TIMEOUT,
         )
         rows = [row for row in output.strip().splitlines() if row]
         headers = rows[0].split("|") if rows else []
@@ -259,7 +427,7 @@ def pgbackrest_metrics(lines):
     try:
         output = command_output(
             ["pgbackrest", f"--stanza={labels['stanza']}", "info", "--output=json"],
-            timeout=20,
+            timeout=PGBACKREST_TIMEOUT,
         )
         data = json.loads(output)
         stanza = data[0] if data else {}
@@ -290,38 +458,81 @@ def collect_metrics():
     lines = [
         "# HELP rental_patroni_up Patroni REST health availability.",
         "# TYPE rental_patroni_up gauge",
+        "# HELP rental_custom_exporter_collector_up Collector-level availability inside the custom exporter.",
+        "# TYPE rental_custom_exporter_collector_up gauge",
+        "# HELP rental_custom_exporter_collector_duration_seconds Collector duration inside the custom exporter.",
+        "# TYPE rental_custom_exporter_collector_duration_seconds gauge",
+        "# HELP rental_custom_exporter_collector_error Collector-level exception marker inside the custom exporter.",
+        "# TYPE rental_custom_exporter_collector_error gauge",
     ]
 
-    for node in POSTGRES_NODES:
-        http_status_metrics(lines, "rental_patroni_up", f"http://{node}:8008/health", {"node": node})
-        http_status_metrics(lines, "rental_patroni_primary", f"http://{node}:8008/primary", {"node": node})
-        http_status_metrics(lines, "rental_patroni_replica", f"http://{node}:8008/replica", {"node": node})
-
-    for node in ETCD_NODES:
-        http_status_metrics(lines, "rental_etcd_up", f"http://{node}:2379/health", {"node": node})
-
-    patroni_component_metrics(lines)
-    http_component_metrics(lines)
-    postgres_cluster_metrics(lines)
-    http_status_metrics(lines, "rental_minio_up", "http://minio:9000/minio/health/live", {"service": "minio"})
-    http_status_metrics(lines, "rental_haproxy_stats_up", "http://haproxy-client-a:7000/", {"client": "a"})
-    http_status_metrics(lines, "rental_haproxy_stats_up", "http://haproxy-client-b:7000/", {"client": "b"})
-
-    pgbouncer_metrics(
+    append_parallel(
         lines,
-        "a",
-        "pgbouncer-client-a",
-        "PGBOUNCER_CLIENT_A_ADMIN_USER",
-        "PGBOUNCER_CLIENT_A_ADMIN_PASSWORD",
+        [
+            (
+                "patroni_nodes",
+                lambda: collect_from_lines(
+                    append_parallel,
+                    [(f"patroni_{node}", lambda node=node: collect_patroni_node_metrics(node)) for node in POSTGRES_NODES],
+                    20,
+                ),
+            ),
+            (
+                "etcd_nodes",
+                lambda: collect_from_lines(
+                    append_parallel,
+                    [
+                        (
+                            f"etcd_{node}",
+                            lambda node=node: collect_http_status(
+                                "rental_etcd_up",
+                                f"http://{node}:2379/health",
+                                {"node": node},
+                            ),
+                        )
+                        for node in ETCD_NODES
+                    ],
+                    20,
+                ),
+            ),
+            ("component_states", lambda: collect_from_lines(http_component_metrics)),
+            ("postgres_sql", lambda: collect_from_lines(postgres_cluster_metrics)),
+            (
+                "minio_status",
+                lambda: collect_http_status("rental_minio_up", "http://minio:9000/minio/health/live", {"service": "minio"}),
+            ),
+            (
+                "haproxy_client_a_status",
+                lambda: collect_http_status("rental_haproxy_stats_up", "http://haproxy-client-a:7000/", {"client": "a"}),
+            ),
+            (
+                "haproxy_client_b_status",
+                lambda: collect_http_status("rental_haproxy_stats_up", "http://haproxy-client-b:7000/", {"client": "b"}),
+            ),
+            (
+                "pgbouncer_client_a",
+                lambda: collect_from_lines(
+                    pgbouncer_metrics,
+                    "a",
+                    "pgbouncer-client-a",
+                    "PGBOUNCER_CLIENT_A_ADMIN_USER",
+                    "PGBOUNCER_CLIENT_A_ADMIN_PASSWORD",
+                ),
+            ),
+            (
+                "pgbouncer_client_b",
+                lambda: collect_from_lines(
+                    pgbouncer_metrics,
+                    "b",
+                    "pgbouncer-client-b",
+                    "PGBOUNCER_CLIENT_B_ADMIN_USER",
+                    "PGBOUNCER_CLIENT_B_ADMIN_PASSWORD",
+                ),
+            ),
+            ("pgbackrest", lambda: collect_from_lines(pgbackrest_metrics)),
+        ],
+        max_workers=20,
     )
-    pgbouncer_metrics(
-        lines,
-        "b",
-        "pgbouncer-client-b",
-        "PGBOUNCER_CLIENT_B_ADMIN_USER",
-        "PGBOUNCER_CLIENT_B_ADMIN_PASSWORD",
-    )
-    pgbackrest_metrics(lines)
 
     component_state(lines, "Observability", "pmm-custom-exporter", "exporting", "up", "custom exporter process is running")
     lines.append(metric("rental_custom_exporter_scrape_timestamp", int(time.time())))
@@ -340,7 +551,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def log_message(self, fmt, *args):
         return
@@ -348,4 +562,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PMM_CUSTOM_EXPORTER_PORT", "9187"))
-    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

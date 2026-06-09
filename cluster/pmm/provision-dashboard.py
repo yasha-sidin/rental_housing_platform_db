@@ -71,6 +71,10 @@ def target(expr, legend="", ref_id="A", instant=False, result_format=None):
     return data
 
 
+def zero_when_missing(expr):
+    return f"({expr}) or vector(0)"
+
+
 def thresholds_for_count(expected):
     steps = [{"color": "red", "value": None}]
     if expected > 1:
@@ -243,24 +247,24 @@ def build_dashboard():
     panel_id = 1
 
     stat_specs = [
-        ("PostgreSQL up", 'sum(max by (service_name) (pg_up{service_name=~"postgres-node-.*"}))', 5),
-        ("Primary", "sum(rental_patroni_primary)", 1),
-        ("Sync standbys", "max(rental_postgres_sync_standby_count)", 2),
-        ("etcd nodes", "sum(rental_etcd_up)", 5),
-        ("HAProxy", "sum(rental_haproxy_stats_up)", 2),
-        ("PgBouncer", "sum(rental_pgbouncer_up)", 2),
-        ("Backup workers", 'sum(max by (service_name) (up{service_name=~"backup-worker-.*"}))', 2),
-        ("pgBackRest", "max(rental_pgbackrest_info_up)", 1),
+        ("PostgreSQL up", zero_when_missing("sum(rental_patroni_up)"), 5),
+        ("Primary", zero_when_missing("sum(rental_patroni_primary)"), 1),
+        ("Sync standbys", zero_when_missing("max(rental_postgres_sync_standby_count)"), 2),
+        ("etcd nodes", zero_when_missing("sum(rental_etcd_up)"), 5),
+        ("HAProxy", zero_when_missing("sum(rental_haproxy_stats_up)"), 2),
+        ("PgBouncer", zero_when_missing("sum(rental_pgbouncer_up)"), 2),
+        ("Backup workers", zero_when_missing('sum(max by (service_name) (up{service_name=~"backup-worker-.*"}))'), 2),
+        ("pgBackRest", zero_when_missing("max(rental_pgbackrest_info_up)"), 1),
     ]
     for idx, (title, expr, expected) in enumerate(stat_specs):
         panels.append(stat_panel(panel_id, title, expr, idx * 3, 0, 3, 4, expected=expected))
         panel_id += 1
 
     second_row = [
-        ("Streaming replicas", "max(rental_postgres_streaming_replica_count)", 4, "short"),
-        ("Replication lag", "max(rental_postgres_replication_lag_bytes)", None, "bytes"),
-        ("MinIO", "max(rental_minio_up)", 1, "short"),
-        ("WAL failures 15m", "increase(rental_pg_wal_archiver_failed_count[15m])", None, "short"),
+        ("Streaming replicas", zero_when_missing("max(rental_postgres_streaming_replica_count)"), 4, "short"),
+        ("Replication lag", zero_when_missing("max(rental_postgres_replication_lag_bytes)"), None, "bytes"),
+        ("MinIO", zero_when_missing("max(rental_minio_up)"), 1, "short"),
+        ("WAL failures 15m", zero_when_missing("increase(rental_pg_wal_archiver_failed_count[15m])"), None, "short"),
     ]
     for idx, (title, expr, expected, unit) in enumerate(second_row):
         panel = stat_panel(panel_id, title, expr, idx * 6, 4, 6, 4, expected=expected, unit=unit)

@@ -3,7 +3,10 @@ import json
 import os
 import subprocess
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+PGBACKREST_TIMEOUT = float(os.environ.get("BACKUP_WORKER_PGBACKREST_TIMEOUT", "1"))
 
 
 def metric(name, value, labels=None):
@@ -14,7 +17,7 @@ def metric(name, value, labels=None):
     return f"{name}{label_text} {value}"
 
 
-def command_output(args, timeout=20):
+def command_output(args, timeout=PGBACKREST_TIMEOUT):
     completed = subprocess.run(
         args,
         check=True,
@@ -66,6 +69,18 @@ def collect_metrics():
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/health":
+            body = b"ok\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except BrokenPipeError:
+                pass
+            return
+
         if self.path not in ("/", "/metrics"):
             self.send_response(404)
             self.end_headers()
@@ -76,7 +91,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def log_message(self, fmt, *args):
         return
@@ -84,4 +102,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKUP_WORKER_EXPORTER_PORT", "9190"))
-    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
