@@ -1,18 +1,22 @@
 package util
 
 import (
+	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 )
 
-func WriteScenarioNote(scenario string, text string) error {
-	return WriteArtifact(scenario, "next_steps.txt", text)
+func PrintScenarioNote(scenario string, text string) error {
+	return PrintArtifact(scenario, "next_steps.txt", text)
 }
 
-func WriteArtifact(scenario string, name string, content string) error {
-	path := filepath.Join("demo", scenario, "artifacts", name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+func PrintArtifact(scenario string, name string, content string) error {
+	fmt.Fprintf(os.Stdout, "[rentalctl] %s/%s\n", scenario, name)
+	if content != "" {
+		fmt.Fprint(os.Stdout, content)
+		if !strings.HasSuffix(content, "\n") {
+			fmt.Fprintln(os.Stdout)
+		}
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	return nil
 }

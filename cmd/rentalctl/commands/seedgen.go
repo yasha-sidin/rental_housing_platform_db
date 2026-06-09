@@ -39,7 +39,7 @@ func newSeedgenCommand() *cobra.Command {
 	cmd.Flags().IntVar(&opts.startDayOffset, "start-day-offset", opts.startDayOffset, "first generated availability day offset from current_date")
 	cmd.Flags().StringVar(&opts.prefix, "prefix", opts.prefix, "username and URL prefix for generated data")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", opts.output, "SQL output path, or - for stdout")
-	cmd.Flags().BoolVar(&opts.apply, "apply", false, "write SQL to demo artifacts and apply it through postgres-client")
+	cmd.Flags().BoolVar(&opts.apply, "apply", false, "write SQL to the explicit output file and apply it through postgres-client")
 
 	return cmd
 }
@@ -56,7 +56,7 @@ type seedgenCommandOptions struct {
 func runSeedgen(ctx context.Context, cmd *cobra.Command, opts seedgenCommandOptions) error {
 	output := opts.output
 	if opts.apply && output == "-" {
-		output = filepath.Join("demo", "01-domain", "artifacts", "load_seed.sql")
+		return fmt.Errorf("--apply requires an explicit --output path; no default file is created in demo/")
 	}
 
 	generatorOptions := seedgen.Options{

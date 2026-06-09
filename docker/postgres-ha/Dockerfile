@@ -38,8 +38,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker/postgres-ha/patroni-entrypoint.sh /usr/local/bin/patroni-entrypoint.sh
+COPY docker/postgres-ha/write-readiness.py /usr/local/bin/write-readiness.py
 
 RUN chmod +x /usr/local/bin/patroni-entrypoint.sh \
+    && chmod +x /usr/local/bin/write-readiness.py \
     && mkdir -p /etc/patroni /etc/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest \
     && chown -R postgres:postgres /etc/patroni /etc/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
 

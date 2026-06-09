@@ -1,7 +1,0 @@
-  entity  | count 
-----------+-------
- bookings |     2
- listings |     4
- users    |     6
-(3 rows)
-
